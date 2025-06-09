@@ -2,14 +2,20 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from ttkthemes import ThemedTk
 from database import NotesDB
-import os
-from PIL import Image, ImageTk
+from config import Config
+from settings_dialog import SettingsDialog
 
 class NotesApp:
     def __init__(self, root):
         self.root = root
         self.root.title("SkimNote - Менеджер заметок")
         self.root.geometry("1000x600")
+        
+        # Центрируем окно на экране
+        self.center_window()
+        
+        # Загружаем настройки
+        self.config = Config()
         
         self.db = NotesDB()
         self.current_note_id = None
@@ -21,9 +27,34 @@ class NotesApp:
         self.create_toolbar()
         self.setup_ui()
         self.load_notes()
+        self.setup_shortcuts()
+        self.apply_settings()
 
         # Привязываем обработчик закрытия окна
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def center_window(self):
+        """Центрирование окна на экране"""
+        # Получаем размеры экрана
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        # Получаем размеры окна
+        window_width = 1000
+        window_height = 600
+        
+        # Вычисляем координаты для центрирования
+        center_x = int((screen_width - window_width) / 2)
+        center_y = int((screen_height - window_height) / 2)
+        
+        # Устанавливаем позицию окна
+        self.root.geometry(f"{window_width}x{window_height}+{center_x}+{center_y}")
+
+    def setup_shortcuts(self):
+        """Настройка горячих клавиш"""
+        self.root.bind('<Insert>', lambda e: self.new_note())
+        self.root.bind('<Alt-Insert>', lambda e: self.new_subnote())
+        self.root.bind('<Delete>', lambda e: self.delete_note())
 
     def create_menu(self):
         # Создаем главное меню
@@ -33,10 +64,15 @@ class NotesApp:
         # Меню "Файл"
         file_menu = tk.Menu(self.menubar, tearoff=0)
         self.menubar.add_cascade(label="Файл", menu=file_menu)
-        file_menu.add_command(label="Новая заметка", command=self.new_note)
-        file_menu.add_command(label="Новая вложенная заметка", command=self.new_subnote)
+        file_menu.add_command(label="Новая заметка (Insert)", command=self.new_note)
+        file_menu.add_command(label="Новая вложенная заметка (Alt+Insert)", command=self.new_subnote)
         file_menu.add_separator()
         file_menu.add_command(label="Выход", command=self.on_closing)
+
+        # Меню "Настройки"
+        settings_menu = tk.Menu(self.menubar, tearoff=0)
+        self.menubar.add_cascade(label="Настройки", menu=settings_menu)
+        settings_menu.add_command(label="Параметры...", command=self.show_settings)
 
         # Меню "Справка"
         help_menu = tk.Menu(self.menubar, tearoff=0)
@@ -44,89 +80,49 @@ class NotesApp:
         help_menu.add_command(label="О программе", command=self.show_about)
 
     def create_toolbar(self):
-        # Создаем и настраиваем панель инструментов
-        self.toolbar = ttk.Frame(self.root)
-        self.toolbar.pack(fill=tk.X, padx=5, pady=2)
+        """Создание панели инструментов"""
+        toolbar = ttk.Frame(self.root)
+        toolbar.pack(fill=tk.X, padx=5, pady=2)
 
-        # Стиль для кнопок панели инструментов
-        style = ttk.Style()
-        style.configure('Toolbar.TButton', font=('TkDefaultFont', 12))
-
-        # Добавляем кнопки создания заметок
-        ttk.Button(self.toolbar, text="📝 Новая заметка", style='Toolbar.TButton',
+        # Создаем кнопки с иконками и всплывающими подсказками
+        ttk.Button(toolbar, text="➕", width=3,
                   command=self.new_note).pack(side=tk.LEFT, padx=2)
-        ttk.Button(self.toolbar, text="📑 Новая вложенная", style='Toolbar.TButton',
+        self.create_tooltip(toolbar.winfo_children()[-1], 
+                          "Новая заметка (Insert)")
+
+        ttk.Button(toolbar, text="⊕", width=3,
                   command=self.new_subnote).pack(side=tk.LEFT, padx=2)
+        self.create_tooltip(toolbar.winfo_children()[-1], 
+                          "Новая вложенная заметка (Alt+Insert)")
 
-        # Добавляем вертикальный разделитель
-        ttk.Separator(self.toolbar, orient='vertical').pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=2)
-
-        # Добавляем кнопку удаления
-        ttk.Button(self.toolbar, text="🗑️ Удалить", style='Toolbar.TButton',
+        ttk.Button(toolbar, text="🗑", width=3,
                   command=self.delete_note).pack(side=tk.LEFT, padx=2)
+        self.create_tooltip(toolbar.winfo_children()[-1], 
+                          "Удалить заметку (Delete)")
 
-        # Горизонтальный разделитель под панелью инструментов
-        ttk.Separator(self.toolbar, orient='horizontal').pack(fill=tk.X, pady=2)
+    def create_tooltip(self, widget, text):
+        """Создание всплывающей подсказки для виджета"""
+        def enter(event):
+            x, y, _, _ = widget.bbox("insert")
+            x += widget.winfo_rootx() + 25
+            y += widget.winfo_rooty() + 20
+            
+            # Создаем всплывающее окно
+            self.tooltip = tk.Toplevel(widget)
+            self.tooltip.wm_overrideredirect(True)
+            self.tooltip.wm_geometry(f"+{x}+{y}")
+            
+            label = ttk.Label(self.tooltip, text=text, 
+                            background="#ffffe0", relief="solid", borderwidth=1)
+            label.pack()
 
-    def show_about(self):
-        messagebox.showinfo(
-            "О программе",
-            "SkimNote - Менеджер заметок\n\n"
-            "Версия: 1.0\n"
-            "Простой и удобный менеджер заметок с поддержкой\n"
-            "вложенных заметок.\n\n"
-            "© 2024 SkimNote"
-        )
+        def leave(event):
+            if hasattr(self, 'tooltip'):
+                self.tooltip.destroy()
+                del self.tooltip
 
-    def setup_ui(self):
-        # Создаем главный контейнер
-        main_container = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-        main_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Левая панель с деревом заметок
-        left_frame = ttk.Frame(main_container)
-        main_container.add(left_frame, weight=1)
-
-        # Дерево заметок
-        self.notes_tree = ttk.Treeview(left_frame, selectmode='browse')
-        self.notes_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        self.notes_tree.heading('#0', text='Заметки', anchor=tk.W)
-        
-        # Привязываем события для дерева
-        self.notes_tree.bind('<<TreeviewSelect>>', self.on_note_select)
-        self.notes_tree.bind('<Double-1>', self.start_rename)
-        self.notes_tree.bind('<Return>', self.start_rename)
-        self.notes_tree.bind('<Escape>', self.cancel_rename)
-        self.notes_tree.bind('<F2>', self.start_rename)
-        
-        # Создаем поле ввода для редактирования
-        self.title_editor = ttk.Entry(self.notes_tree)
-        self.title_editor.bind('<Return>', self.finish_rename)
-        self.title_editor.bind('<Escape>', self.cancel_rename)
-        self.title_editor.bind('<FocusOut>', self.finish_rename)
-        
-        # Создаем контекстное меню
-        self.context_menu = tk.Menu(self.root, tearoff=0)
-        self.context_menu.add_command(label="📝 Добавить заметку", command=self.new_note)
-        self.context_menu.add_command(label="📑 Добавить вложенную", command=self.new_subnote)
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="✏️ Переименовать", command=self.start_rename)
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="🗑️ Удалить", command=self.delete_note)
-        
-        # Привязываем появление контекстного меню к правой кнопке мыши
-        self.notes_tree.bind('<Button-3>', self.show_context_menu)
-
-        # Правая панель с редактором
-        right_frame = ttk.Frame(main_container)
-        main_container.add(right_frame, weight=3)
-
-        # Поле для редактирования заметки
-        self.note_content = tk.Text(right_frame, wrap=tk.WORD)
-        self.note_content.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # Отслеживаем изменения в тексте
-        self.note_content.bind('<<Modified>>', self.on_content_modified)
+        widget.bind('<Enter>', enter)
+        widget.bind('<Leave>', leave)
 
     def load_notes(self, parent=''):
         # Очищаем дерево
@@ -154,11 +150,12 @@ class NotesApp:
     def new_note(self):
         """Создать новую заметку"""
         try:
-            note_id = self.db.create_note("Новая заметка", "", self.current_parent_id)
+            note_id = self.db.add_note("Новая заметка", "", self.current_parent_id)
             self.load_notes()
             # Выбираем созданную заметку
             self.notes_tree.selection_set(str(note_id))
             self.notes_tree.see(str(note_id))
+            self.notes_tree.focus(str(note_id))
             # Сразу запускаем переименование
             self.start_rename()
         except Exception as e:
@@ -171,11 +168,12 @@ class NotesApp:
             
         parent_id = int(self.notes_tree.selection()[0])
         try:
-            note_id = self.db.create_note("Новая заметка", "", parent_id)
+            note_id = self.db.add_note("Новая заметка", "", parent_id)
             self.load_notes()
             # Выбираем созданную заметку
             self.notes_tree.selection_set(str(note_id))
             self.notes_tree.see(str(note_id))
+            self.notes_tree.focus(str(note_id))
             # Сразу запускаем переименование
             self.start_rename()
         except Exception as e:
@@ -254,7 +252,7 @@ class NotesApp:
                 self.context_menu.entryconfig("🗑️ Удалить", state="disabled")
         else:
             # Если клик на пустом месте, оставляем только создание новой заметки
-            self.context_menu.entryconfig("📑 Добавить вложенную", state="disabled")
+            self.context_menu.entryconfig("📝 Добавить заметку", state="disabled")
             self.context_menu.entryconfig("✏️ Переименовать", state="disabled")
             self.context_menu.entryconfig("🗑️ Удалить", state="disabled")
         
@@ -319,13 +317,103 @@ class NotesApp:
         self.title_editor.place_forget()
         self.editing_title = False
         self.notes_tree.focus_set()
+        # Восстанавливаем выделение заметки
+        self.notes_tree.selection_set(item_id)
+        self.notes_tree.focus(item_id)
 
     def cancel_rename(self, event=None):
         """Отменить редактирование названия заметки"""
         if self.editing_title:
+            item_id = self.notes_tree.selection()[0]
             self.title_editor.place_forget()
             self.editing_title = False
             self.notes_tree.focus_set()
+            # Восстанавливаем выделение заметки
+            self.notes_tree.selection_set(item_id)
+            self.notes_tree.focus(item_id)
+
+    def show_about(self):
+        messagebox.showinfo("О программе", 
+            "SkimNote - Менеджер заметок\n\n"
+            "Горячие клавиши:\n"
+            "Insert - Новая заметка\n"
+            "Alt+Insert - Новая вложенная заметка\n"
+            "F2 - Переименовать заметку\n"
+            "Delete - Удалить заметку\n\n"
+            "© 2024")
+
+    def show_settings(self):
+        """Показать диалог настроек"""
+        dialog = SettingsDialog(self.root, self.config)
+        self.root.wait_window(dialog.dialog)
+        if dialog.result:
+            self.apply_settings()
+
+    def apply_settings(self):
+        """Применить настройки к интерфейсу"""
+        # Настройки шрифта дерева
+        # Для Treeview нужно использовать размер на 2-3 пункта больше,
+        # чтобы визуально соответствовать размеру обычного текста
+        tree_font_size = self.config.get('tree_font_size')
+        tree_font = (self.config.get('tree_font_family'), 
+                    tree_font_size + 3)
+        style = ttk.Style()
+        style.configure('Treeview', font=tree_font, rowheight=tree_font_size + 10)
+        
+        # Настройки шрифта заметок
+        note_font = (self.config.get('note_font_family'), 
+                    self.config.get('note_font_size'))
+        self.note_content.configure(font=note_font)
+
+    def setup_ui(self):
+        # Создаем главный контейнер
+        main_container = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Левая панель с деревом заметок
+        left_frame = ttk.Frame(main_container)
+        main_container.add(left_frame, weight=1)
+
+        # Дерево заметок
+        self.notes_tree = ttk.Treeview(left_frame, selectmode='browse')
+        self.notes_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.notes_tree.heading('#0', text='Заметки', anchor=tk.W)
+        
+        # Привязываем события для дерева
+        self.notes_tree.bind('<<TreeviewSelect>>', self.on_note_select)
+        self.notes_tree.bind('<Double-1>', self.start_rename)
+        self.notes_tree.bind('<Return>', self.start_rename)
+        self.notes_tree.bind('<Escape>', self.cancel_rename)
+        self.notes_tree.bind('<F2>', self.start_rename)
+        
+        # Создаем поле ввода для редактирования
+        self.title_editor = ttk.Entry(self.notes_tree)
+        self.title_editor.bind('<Return>', self.finish_rename)
+        self.title_editor.bind('<Escape>', self.cancel_rename)
+        self.title_editor.bind('<FocusOut>', self.finish_rename)
+        
+        # Создаем контекстное меню
+        self.context_menu = tk.Menu(self.root, tearoff=0)
+        self.context_menu.add_command(label="📝 Добавить заметку", command=self.new_note)
+        self.context_menu.add_command(label="📑 Добавить вложенную", command=self.new_subnote)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="✏️ Переименовать", command=self.start_rename)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="🗑️ Удалить", command=self.delete_note)
+        
+        # Привязываем появление контекстного меню к правой кнопке мыши
+        self.notes_tree.bind('<Button-3>', self.show_context_menu)
+
+        # Правая панель с редактором
+        right_frame = ttk.Frame(main_container)
+        main_container.add(right_frame, weight=3)
+
+        # Поле для редактирования заметки
+        self.note_content = tk.Text(right_frame, wrap=tk.WORD)
+        self.note_content.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Отслеживаем изменения в тексте
+        self.note_content.bind('<<Modified>>', self.on_content_modified)
 
 if __name__ == "__main__":
     root = ThemedTk(theme="arc")
