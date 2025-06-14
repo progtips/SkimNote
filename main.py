@@ -3,14 +3,20 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QHBoxLayout, QTreeWidget, QTreeWidgetItem, QTextEdit,
                             QPushButton, QMenu, QMessageBox, QInputDialog, QToolBar,
                             QLabel, QSplitter, QDialog, QLineEdit, QFormLayout,
-                            QCheckBox, QSpinBox, QComboBox, QFileDialog)
+                            QCheckBox, QSpinBox, QComboBox, QFileDialog, QGroupBox)
 from PyQt6.QtCore import Qt, QSize, QSettings
-from PyQt6.QtGui import QAction, QIcon, QKeySequence, QFontDatabase
+from PyQt6.QtGui import QAction, QIcon, QKeySequence, QFontDatabase, QFont
 from database import NotesDB
 from config import Config
 from settings_dialog import SettingsDialog
 import os
 import sqlite3
+import configparser
+
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class SearchDialog(QDialog):
     def __init__(self, parent=None, replace_mode=False, title=None):
@@ -50,18 +56,17 @@ class SearchDialog(QDialog):
         self.search_edit.setFocus()
 
 class NotesApp(QMainWindow):
+    SETTINGS_FILE = os.path.join(BASE_DIR, 'settings.ini')
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("SkimNote")
-        self.setWindowIcon(QIcon(os.path.join("icons", "app.ico")))
-        self.setMinimumSize(800, 600)
+        self.setGeometry(100, 100, 1200, 800)
         
-        # Загружаем настройки
-        self.settings = QSettings("SkimNote", "SkimNote")
-        self.load_settings()
-        
-        # Инициализируем базу данных
+        # Инициализация базы данных
         self.db = NotesDB()
+        
+        # Инициализация переменных
         self.current_note_id = None
         self.current_parent_id = 1
         self.content_modified = False
@@ -69,102 +74,38 @@ class NotesApp(QMainWindow):
         self.last_search_text = ""
         self.last_replace_text = ""
         
-        # Применяем тему
-        self.apply_theme()
+        # Загрузка настроек
+        self.load_settings()
         
-        # Создаем UI элементы
+        # Настройка интерфейса
         self.setup_ui()
-        self.create_toolbar()  # Создаем панель инструментов до настройки горячих клавиш
-        self.setup_shortcuts()  # Настраиваем горячие клавиши после создания действий
-        
-        # Загружаем заметки
+        self.setup_shortcuts()
         self.load_notes()
+        
+        # Применяем настройки
+        self.apply_font()
 
     def load_settings(self):
-        """Загрузка настроек"""
-        self.dark_theme = self.settings.value("dark_theme", False, type=bool)
-        self.font_size = self.settings.value("font_size", 12, type=int)
-        self.font_family = self.settings.value("font_family", "Segoe UI", type=str)
-
-    def apply_theme(self):
-        """Применение темы"""
-        if self.dark_theme:
-            # Темная тема
-            self.setStyleSheet("""
-                QMainWindow, QDialog {
-                    background-color: #2b2b2b;
-                    color: #ffffff;
-                }
-                QTreeWidget {
-                    background-color: #2b2b2b;
-                    color: #ffffff;
-                    border: 1px solid #3f3f3f;
-                }
-                QTreeWidget::item {
-                    padding: 4px;
-                }
-                QTreeWidget::item:selected {
-                    background-color: #3f3f3f;
-                }
-                QTextEdit {
-                    background-color: #2b2b2b;
-                    color: #ffffff;
-                    border: 1px solid #3f3f3f;
-                }
-                QToolBar {
-                    background-color: #2b2b2b;
-                    border: none;
-                }
-                QToolButton {
-                    background-color: transparent;
-                    border: none;
-                    padding: 4px;
-                }
-                QToolButton:hover {
-                    background-color: #3f3f3f;
-                }
-                QMenuBar {
-                    background-color: #2b2b2b;
-                    color: #ffffff;
-                }
-                QMenuBar::item {
-                    background-color: transparent;
-                }
-                QMenuBar::item:selected {
-                    background-color: #3f3f3f;
-                }
-                QMenu {
-                    background-color: #2b2b2b;
-                    color: #ffffff;
-                }
-                QMenu::item {
-                    background-color: transparent;
-                }
-                QMenu::item:selected {
-                    background-color: #3f3f3f;
-                }
-                QPushButton {
-                    background-color: #3f3f3f;
-                    color: #ffffff;
-                    border: 1px solid #5f5f5f;
-                    padding: 5px 15px;
-                }
-                QPushButton:hover {
-                    background-color: #4f4f4f;
-                }
-                QLineEdit {
-                    background-color: #2b2b2b;
-                    color: #ffffff;
-                    border: 1px solid #3f3f3f;
-                    padding: 4px;
-                }
-                QLabel {
-                    color: #ffffff;
-                }
-            """)
+        config = configparser.ConfigParser()
+        config.read(self.SETTINGS_FILE, encoding='utf-8')
+        self.font_size = int(config.get('main', 'font_size', fallback='12'))
+        self.font_family = config.get('main', 'font_family', fallback='Segoe UI')
+        db_path = config.get('main', 'db_path', fallback='notes.db')
+        if hasattr(self, 'db'):
+            self.db.close()
+            self.db = NotesDB(db_path)
         else:
-            # Светлая тема
-            self.setStyleSheet("")
+            self.db = NotesDB(db_path)
+
+    def apply_font(self):
+        """Применение шрифта ко всем основным элементам интерфейса"""
+        font = QFont(self.font_family, self.font_size)
+        if hasattr(self, 'editor'):
+            self.editor.setFont(font)
+        if hasattr(self, 'tree'):
+            self.tree.setFont(font)
+        if hasattr(self, 'db_path_edit'):
+            self.db_path_edit.setFont(font)
 
     def setup_shortcuts(self):
         """Настройка горячих клавиш"""
@@ -514,79 +455,110 @@ class NotesApp(QMainWindow):
                          "Простой и удобный менеджер заметок с поддержкой "
                          "иерархической структуры.")
 
+    def select_db_file(self, dialog):
+        """Выбор файла базы данных"""
+        file_name, _ = QFileDialog.getOpenFileName(
+            self,
+            "Выберите файл базы данных",
+            "",
+            "SQLite Database (*.db);;All Files (*.*)"
+        )
+        if file_name:
+            self.db_path_edit.setText(file_name)
+            
     def show_settings(self):
         """Показать окно настроек"""
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Настройки")
-        dialog.setMinimumWidth(400)
-        
-        layout = QFormLayout(dialog)
-        
-        # Настройки базы данных
-        db_path = QLineEdit()
-        db_path.setText(self.settings.value("db_path", "notes.db"))
-        db_path.setReadOnly(True)
-        db_browse = QPushButton("Обзор...")
-        db_layout = QHBoxLayout()
-        db_layout.addWidget(db_path)
-        db_layout.addWidget(db_browse)
-        layout.addRow("Файл базы данных:", db_layout)
-        
-        # Настройки шрифта
-        font_size = QSpinBox()
-        font_size.setRange(8, 72)
-        font_size.setValue(self.settings.value("font_size", 12, type=int))
-        layout.addRow("Размер шрифта:", font_size)
-        
-        # Настройки темы
-        theme_combo = QComboBox()
-        theme_combo.addItems(["Светлая", "Темная"])
-        current_theme = self.settings.value("theme", "Светлая")
-        theme_combo.setCurrentText(current_theme)
-        layout.addRow("Тема:", theme_combo)
-        
-        # Кнопки
-        buttons = QHBoxLayout()
-        ok_button = QPushButton("OK")
-        cancel_button = QPushButton("Отмена")
-        
-        ok_button.clicked.connect(dialog.accept)
-        cancel_button.clicked.connect(dialog.reject)
-        
-        buttons.addWidget(ok_button)
-        buttons.addWidget(cancel_button)
-        layout.addRow("", buttons)
-        
-        def browse_db():
-            file_name, _ = QFileDialog.getOpenFileName(
-                self,
-                "Выберите файл базы данных",
-                "",
-                "SQLite Database (*.db);;All Files (*.*)"
-            )
-            if file_name:
-                db_path.setText(file_name)
-        
-        db_browse.clicked.connect(browse_db)
-        
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            # Сохраняем настройки
-            self.settings.setValue("db_path", db_path.text())
-            self.settings.setValue("font_size", font_size.value())
-            self.settings.setValue("theme", theme_combo.currentText())
+        try:
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Настройки")
+            dialog.setModal(True)
             
-            # Применяем настройки
-            self.apply_theme()
-            self.apply_font()
+            layout = QVBoxLayout(dialog)
             
-            # Перезагружаем базу данных
-            self.db = NotesDB(db_path.text())
-            self.load_notes()
+            # Настройки базы данных
+            db_group = QGroupBox("База данных")
+            db_layout = QVBoxLayout()
             
-    def apply_font(self):
-        """Применение шрифта"""
-        # Здесь можно добавить применение шрифта к различным элементам интерфейса
-        pass
+            db_path_layout = QHBoxLayout()
+            db_path_label = QLabel("Путь к базе данных:")
+            self.db_path_edit = QLineEdit(self.db.db_path)
+            db_path_button = QPushButton("Обзор...")
+            db_path_button.clicked.connect(lambda: self.select_db_file(dialog))
+            db_path_layout.addWidget(db_path_label)
+            db_path_layout.addWidget(self.db_path_edit)
+            db_path_layout.addWidget(db_path_button)
+            db_layout.addLayout(db_path_layout)
+            
+            db_group.setLayout(db_layout)
+            layout.addWidget(db_group)
+            
+            # Настройки шрифта
+            font_group = QGroupBox("Шрифт")
+            font_layout = QVBoxLayout()
+            
+            font_size_layout = QHBoxLayout()
+            font_size_label = QLabel("Размер шрифта:")
+            font_size_spin = QSpinBox()
+            font_size_spin.setRange(8, 72)
+            font_size_spin.setValue(self.font_size)
+            font_size_layout.addWidget(font_size_label)
+            font_size_layout.addWidget(font_size_spin)
+            font_layout.addLayout(font_size_layout)
+            
+            font_family_layout = QHBoxLayout()
+            font_family_label = QLabel("Шрифт:")
+            font_family_combo = QComboBox()
+            font_family_combo.addItems(QFontDatabase.families())
+            font_family_combo.setCurrentText(self.font_family)
+            font_family_layout.addWidget(font_family_label)
+            font_family_layout.addWidget(font_family_combo)
+            font_layout.addLayout(font_family_layout)
+            
+            font_group.setLayout(font_layout)
+            layout.addWidget(font_group)
+            
+            # Кнопки
+            buttons_layout = QHBoxLayout()
+            save_button = QPushButton("Сохранить")
+            save_button.clicked.connect(lambda: self.save_settings(
+                dialog,
+                self.db_path_edit.text(),
+                font_size_spin.value(),
+                font_family_combo.currentText()
+            ))
+            cancel_button = QPushButton("Отмена")
+            cancel_button.clicked.connect(dialog.reject)
+            buttons_layout.addWidget(save_button)
+            buttons_layout.addWidget(cancel_button)
+            layout.addLayout(buttons_layout)
+            
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть окно настроек: {str(e)}")
+        
+    def save_settings(self, dialog, db_path, font_size, font_family):
+        import traceback
+        config = configparser.ConfigParser()
+        config['main'] = {
+            'db_path': db_path,
+            'font_size': str(font_size),
+            'font_family': font_family
+        }
+        try:
+            with open(self.SETTINGS_FILE, 'w', encoding='utf-8') as f:
+                config.write(f)
+            # QMessageBox.information(self, "Путь к settings.ini", f"Настройки сохранены по пути:\n{os.path.abspath(self.SETTINGS_FILE)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить настройки!\n{e}\n{traceback.format_exc()}")
+            return
+        # Применяем настройки
+        self.font_size = font_size
+        self.font_family = font_family
+        self.db.close()
+        self.db = NotesDB(db_path)
+        self.load_notes()
+        self.apply_font()
+        dialog.accept()
 
     def handle_f3(self):
         """Обработка нажатия F3"""
