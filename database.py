@@ -108,4 +108,11 @@ class NotesDB:
                 )
                 DELETE FROM notes WHERE id IN (SELECT id FROM children)
             ''', (note_id,))
-            conn.commit() 
+            conn.commit()
+
+    def get_all_notes(self):
+        """Получение всех заметок"""
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, title, content, parent_id FROM notes ORDER BY id")
+            return cursor.fetchall() 
