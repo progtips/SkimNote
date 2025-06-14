@@ -17,6 +17,7 @@ if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ICONS_DIR = os.path.join(BASE_DIR, "icons")
 
 class SearchDialog(QDialog):
     def __init__(self, parent=None, replace_mode=False, title=None):
@@ -82,6 +83,9 @@ class NotesApp(QMainWindow):
         self.setup_shortcuts()
         self.load_notes()
         
+        # Центрируем окно
+        self.center_on_screen()
+        
         # Применяем настройки
         self.apply_font()
 
@@ -109,12 +113,12 @@ class NotesApp(QMainWindow):
 
     def setup_shortcuts(self):
         """Настройка горячих клавиш"""
-        self.new_note_action.setShortcut("Insert")
-        self.new_subnote_action.setShortcut("Alt+Insert")
-        self.delete_note_action.setShortcut("Delete")
-        self.find_action.setShortcut("Ctrl+F")
-        self.find_next_action.setShortcut("F3")
-        self.replace_action.setShortcut("Alt+F3")
+        # self.new_note_action.setShortcut("Insert")
+        # self.new_subnote_action.setShortcut("Alt+Insert")
+        # self.delete_note_action.setShortcut("Delete")
+        # self.find_action.setShortcut("Ctrl+F")
+        # self.find_next_action.setShortcut("F3")
+        # self.replace_action.setShortcut("Alt+F3")
 
     def create_menu(self):
         """Создание меню"""
@@ -123,15 +127,11 @@ class NotesApp(QMainWindow):
         # Меню "Файл"
         file_menu = menubar.addMenu("Файл")
         
-        new_note_action = QAction("Новая заметка", self)
-        new_note_action.setShortcut("Insert")
-        new_note_action.triggered.connect(self.new_note)
-        file_menu.addAction(new_note_action)
-        
-        new_subnote_action = QAction("Новая вложенная заметка", self)
-        new_subnote_action.setShortcut("Alt+Insert")
-        new_subnote_action.triggered.connect(self.new_subnote)
-        file_menu.addAction(new_subnote_action)
+        # --- Новый пункт ---
+        change_db_action = QAction("Сменить базу данных", self)
+        change_db_action.triggered.connect(self.change_db)
+        file_menu.addAction(change_db_action)
+        # --- Конец нового пункта ---
         
         file_menu.addSeparator()
         
@@ -143,6 +143,19 @@ class NotesApp(QMainWindow):
         # Меню "Заметки"
         notes_menu = menubar.addMenu("Заметки")
         
+        # Переносим сюда пункты создания заметок
+        new_note_action = QAction("Новая заметка", self)
+        new_note_action.setShortcut("Insert")
+        new_note_action.triggered.connect(self.new_note)
+        notes_menu.addAction(new_note_action)
+        
+        new_subnote_action = QAction("Новая вложенная заметка", self)
+        new_subnote_action.setShortcut("Alt+Insert")
+        new_subnote_action.triggered.connect(self.new_subnote)
+        notes_menu.addAction(new_subnote_action)
+        
+        notes_menu.addSeparator()
+
         find_action = QAction("Найти", self)
         find_action.setShortcut("Ctrl+F")
         find_action.triggered.connect(self.show_search_dialog)
@@ -187,52 +200,32 @@ class NotesApp(QMainWindow):
         toolbar = QToolBar()
         toolbar.setMovable(False)
         toolbar.setIconSize(QSize(24, 24))
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)  # Показывать только иконки
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.addToolBar(toolbar)
         
         # Новая заметка
-        self.new_note_action = QAction(QIcon(os.path.join("icons", "new_note.svg")), "Новая заметка", self)
-        self.new_note_action.setToolTip("Новая заметка (Insert)")
-        self.new_note_action.triggered.connect(self.new_note)
-        toolbar.addAction(self.new_note_action)
+        new_note_action = QAction("Новая заметка", self)
+        icon_path = os.path.join(ICONS_DIR, "new_note.png")
+        if os.path.exists(icon_path):
+            new_note_action.setIcon(QIcon(icon_path))
+        new_note_action.triggered.connect(self.new_note)
+        toolbar.addAction(new_note_action)
         
         # Новая вложенная заметка
-        self.new_subnote_action = QAction(QIcon(os.path.join("icons", "new_subnote.svg")), "Новая вложенная заметка", self)
-        self.new_subnote_action.setToolTip("Новая вложенная заметка (Alt+Insert)")
-        self.new_subnote_action.triggered.connect(self.new_subnote)
-        toolbar.addAction(self.new_subnote_action)
+        new_subnote_action = QAction("Новая вложенная заметка", self)
+        icon_path = os.path.join(ICONS_DIR, "new_subnote.png")
+        if os.path.exists(icon_path):
+            new_subnote_action.setIcon(QIcon(icon_path))
+        new_subnote_action.triggered.connect(self.new_subnote)
+        toolbar.addAction(new_subnote_action)
         
         # Удалить заметку
-        self.delete_note_action = QAction(QIcon(os.path.join("icons", "delete_note.svg")), "Удалить заметку", self)
-        self.delete_note_action.setToolTip("Удалить заметку (Delete)")
-        self.delete_note_action.triggered.connect(self.delete_note)
-        toolbar.addAction(self.delete_note_action)
-        
-        toolbar.addSeparator()
-        
-        # Найти
-        self.find_action = QAction(QIcon(os.path.join("icons", "find.svg")), "Найти", self)
-        self.find_action.setToolTip("Найти (Ctrl+F)")
-        self.find_action.triggered.connect(self.show_search_dialog)
-        toolbar.addAction(self.find_action)
-        
-        # Найти далее
-        self.find_next_action = QAction(QIcon(os.path.join("icons", "find_next.svg")), "Найти далее", self)
-        self.find_next_action.setToolTip("Найти далее (F3)")
-        self.find_next_action.triggered.connect(self.handle_f3)
-        toolbar.addAction(self.find_next_action)
-        
-        # Найти и заменить
-        self.replace_action = QAction(QIcon(os.path.join("icons", "replace.svg")), "Найти и заменить", self)
-        self.replace_action.setToolTip("Найти и заменить (Alt+F3)")
-        self.replace_action.triggered.connect(self.show_replace_dialog)
-        toolbar.addAction(self.replace_action)
-        
-        # Заменить все
-        self.replace_all_action = QAction(QIcon(os.path.join("icons", "replace_all.svg")), "Заменить все", self)
-        self.replace_all_action.setToolTip("Заменить все")
-        self.replace_all_action.triggered.connect(self.show_replace_all_dialog)
-        toolbar.addAction(self.replace_all_action)
+        delete_action = QAction("Удалить заметку", self)
+        icon_path = os.path.join(ICONS_DIR, "delete.png")
+        if os.path.exists(icon_path):
+            delete_action.setIcon(QIcon(icon_path))
+        delete_action.triggered.connect(self.delete_note)
+        toolbar.addAction(delete_action)
 
     def setup_ui(self):
         """Настройка пользовательского интерфейса"""
@@ -414,15 +407,15 @@ class NotesApp(QMainWindow):
         """Показ контекстного меню"""
         menu = QMenu()
         
-        new_note_action = menu.addAction(QIcon(os.path.join("icons", "new_note.svg")), "Новая заметка")
+        new_note_action = menu.addAction(QIcon(os.path.join(ICONS_DIR, "new_note.png")), "Новая заметка")
         new_note_action.triggered.connect(self.new_note)
         
-        new_subnote_action = menu.addAction(QIcon(os.path.join("icons", "new_subnote.svg")), "Новая вложенная заметка")
+        new_subnote_action = menu.addAction(QIcon(os.path.join(ICONS_DIR, "new_subnote.png")), "Новая вложенная заметка")
         new_subnote_action.triggered.connect(self.new_subnote)
         
         menu.addSeparator()
         
-        delete_action = menu.addAction(QIcon(os.path.join("icons", "delete.svg")), "Удалить")
+        delete_action = menu.addAction(QIcon(os.path.join(ICONS_DIR, "delete.png")), "Удалить")
         delete_action.triggered.connect(self.delete_note)
         
         menu.exec(self.tree.mapToGlobal(position))
@@ -689,6 +682,31 @@ class NotesApp(QMainWindow):
         """Получение заметки по ID"""
         self.cursor.execute("SELECT * FROM notes WHERE id = ?", (note_id,))
         return self.cursor.fetchone()
+
+    def center_on_screen(self):
+        screen = self.screen().geometry()
+        size = self.geometry()
+        x = (screen.width() - size.width()) // 2
+        y = (screen.height() - size.height()) // 2
+        self.move(x, y)
+
+    def change_db(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, "Выберите файл базы данных", "", "SQLite Database (*.db);;All Files (*.*)")
+        if file_name:
+            self.save_settings_dialog_db_path(file_name)
+
+    def save_settings_dialog_db_path(self, db_path):
+        # Сохраняем только путь к базе данных, остальные настройки не трогаем
+        config = configparser.ConfigParser()
+        config.read(self.SETTINGS_FILE, encoding='utf-8')
+        if 'main' not in config:
+            config['main'] = {}
+        config['main']['db_path'] = db_path
+        with open(self.SETTINGS_FILE, 'w', encoding='utf-8') as f:
+            config.write(f)
+        self.db.close()
+        self.db = NotesDB(db_path)
+        self.load_notes()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
