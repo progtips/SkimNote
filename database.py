@@ -1,9 +1,19 @@
 import sqlite3
 from datetime import datetime
+import os
+import sys
 
 class NotesDB:
     def __init__(self, db_file="notes.db"):
-        self.db_file = db_file
+        # Получаем путь к директории с exe-файлом
+        if getattr(sys, 'frozen', False):
+            # Если запущено как exe
+            exe_dir = os.path.dirname(sys.executable)
+        else:
+            # Если запущено как скрипт
+            exe_dir = os.getcwd()
+            
+        self.db_file = os.path.join(exe_dir, db_file)
         self._create_tables()
 
     def _create_tables(self):
@@ -30,6 +40,24 @@ class NotesDB:
                 cursor.execute(
                     'INSERT INTO notes (id, title, content, parent_id, created_at, updated_at) VALUES (1, "Все заметки", "", NULL, ?, ?)',
                     (now, now)
+                )
+                conn.commit()
+                
+                # Создаем первую заметку
+                welcome_text = """SkimNote - это простой и удобный менеджер заметок.
+
+Основные возможности:
+- Создание и редактирование заметок
+- Древовидная структура заметок
+- Поиск по заметкам
+- Настройка внешнего вида
+- Поддержка горячих клавиш
+
+Эту заметку можно удалить."""
+                
+                cursor.execute(
+                    'INSERT INTO notes (title, content, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+                    ("Заметка", welcome_text, 1, now, now)
                 )
                 conn.commit()
 

@@ -9,6 +9,7 @@ from database import NotesDB
 from config import Config
 from settings_dialog import SettingsDialog
 import os
+import sqlite3
 
 class NotesApp(QMainWindow):
     def __init__(self):
@@ -125,7 +126,7 @@ class NotesApp(QMainWindow):
         
         # Создаем дерево заметок
         self.notes_tree = QTreeWidget()
-        self.notes_tree.setHeaderLabel("Заметки")
+        self.notes_tree.setHeaderHidden(True)  # Скрываем заголовок полностью
         self.notes_tree.itemSelectionChanged.connect(self.on_note_select)
         self.notes_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.notes_tree.customContextMenuRequested.connect(self.show_context_menu)
@@ -161,18 +162,17 @@ class NotesApp(QMainWindow):
         # Создаем словарь для хранения элементов дерева
         tree_items = {}
         
-        # Сначала добавляем корневые заметки
+        # Добавляем заметки в дерево
         for note in notes:
             note_id, title, content, parent_id, created_at, updated_at = note
-            if parent_id is None or parent_id == 1:
+            if note_id == 1:  # Пропускаем корневую заметку
+                continue
+                
+            if parent_id == 1:  # Если это заметка верхнего уровня
                 item = QTreeWidgetItem(self.notes_tree, [title])
                 item.setData(0, Qt.ItemDataRole.UserRole, note_id)
                 tree_items[note_id] = item
-        
-        # Затем добавляем все остальные заметки
-        for note in notes:
-            note_id, title, content, parent_id, created_at, updated_at = note
-            if parent_id and parent_id != 1 and parent_id in tree_items:
+            elif parent_id in tree_items:  # Если это вложенная заметка
                 item = QTreeWidgetItem(tree_items[parent_id], [title])
                 item.setData(0, Qt.ItemDataRole.UserRole, note_id)
                 tree_items[note_id] = item
