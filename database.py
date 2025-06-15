@@ -38,6 +38,7 @@ class NotesDB:
                     parent_id INTEGER,
                     created_at TIMESTAMP,
                     updated_at TIMESTAMP,
+                    order_index INTEGER DEFAULT 0,
                     FOREIGN KEY (parent_id) REFERENCES notes (id)
                 )
             ''')
@@ -64,9 +65,13 @@ class NotesDB:
     def add_note(self, title, content="", parent_id=1):
         now = datetime.now()
         with self.conn:
+            # Получаем максимальный порядок для заметок с таким же parent_id
+            self.cursor.execute('SELECT MAX(order_index) FROM notes WHERE parent_id = ?', (parent_id,))
+            max_order = self.cursor.fetchone()[0] or 0
+            
             self.cursor.execute(
-                'INSERT INTO notes (title, content, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-                (title, content, parent_id, now, now)
+                'INSERT INTO notes (title, content, parent_id, created_at, updated_at, order_index) VALUES (?, ?, ?, ?, ?, ?)',
+                (title, content, parent_id, now, now, max_order + 1)
             )
             return self.cursor.lastrowid
 
@@ -79,12 +84,21 @@ class NotesDB:
             )
             self.conn.commit()
 
+    def update_note_order(self, note_id, new_order):
+        """Обновляет порядок заметки"""
+        with self.conn:
+            self.cursor.execute(
+                'UPDATE notes SET order_index = ? WHERE id = ?',
+                (new_order, note_id)
+            )
+            self.conn.commit()
+
     def get_notes(self, parent_id=None):
         with self.conn:
             if parent_id is None:
-                self.cursor.execute('SELECT id, title, content, parent_id, created_at, updated_at FROM notes')
+                self.cursor.execute('SELECT id, title, content, parent_id, created_at, updated_at, order_index FROM notes ORDER BY order_index, id')
             else:
-                self.cursor.execute('SELECT id, title, content, parent_id, created_at, updated_at FROM notes WHERE parent_id = ?', (parent_id,))
+                self.cursor.execute('SELECT id, title, content, parent_id, created_at, updated_at, order_index FROM notes WHERE parent_id = ? ORDER BY order_index, id', (parent_id,))
             return self.cursor.fetchall()
 
     def get_note(self, note_id):
@@ -108,7 +122,7 @@ class NotesDB:
     def get_all_notes(self):
         """Получение всех заметок"""
         with self.conn:
-            self.cursor.execute("SELECT id, title, content, parent_id FROM notes ORDER BY id")
+            self.cursor.execute("SELECT id, title, content, parent_id, order_index FROM notes ORDER BY order_index, id")
             return self.cursor.fetchall()
 
     def close(self):

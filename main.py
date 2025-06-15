@@ -173,6 +173,20 @@ class NotesApp(QMainWindow):
         
         notes_menu.addSeparator()
 
+        # --- Новый пункт: Переместить вверх ---
+        move_up_action = QAction("Переместить вверх", self)
+        move_up_action.setShortcut("Ctrl+Up")
+        move_up_action.triggered.connect(self.move_note_up)
+        notes_menu.addAction(move_up_action)
+
+        # --- Новый пункт: Переместить вниз ---
+        move_down_action = QAction("Переместить вниз", self)
+        move_down_action.setShortcut("Ctrl+Down")
+        move_down_action.triggered.connect(self.move_note_down)
+        notes_menu.addAction(move_down_action)
+
+        notes_menu.addSeparator()
+
         find_action = QAction("Найти", self)
         find_action.setShortcut("Ctrl+F")
         find_action.triggered.connect(self.show_search_dialog)
@@ -299,9 +313,9 @@ class NotesApp(QMainWindow):
         # Создаем словарь для быстрого доступа к элементам дерева
         tree_items = {}
         
-        # Сначала создаем все элементы дерева
+        # Сначала создаем все элементы дерева верхнего уровня
         for note in notes:
-            note_id, title, content, parent_id = note
+            note_id, title, content, parent_id, order_index = note
             
             if parent_id == 1:  # Если это заметка верхнего уровня
                 item = QTreeWidgetItem(self.tree, [title])
@@ -310,7 +324,7 @@ class NotesApp(QMainWindow):
         
         # Затем добавляем дочерние элементы
         for note in notes:
-            note_id, title, content, parent_id = note
+            note_id, title, content, parent_id, order_index = note
             
             if parent_id != 1:  # Если это вложенная заметка
                 parent_item = tree_items.get(parent_id)
@@ -865,6 +879,10 @@ class NotesApp(QMainWindow):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.close()
+        elif event.key() == Qt.Key.Key_Up and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self.move_note_up()
+        elif event.key() == Qt.Key.Key_Down and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self.move_note_down()
         else:
             super().keyPressEvent(event)
 
@@ -875,6 +893,50 @@ class NotesApp(QMainWindow):
         note = self.db.get_note(note_id)
         if note and note[1] != new_title:
             self.db.update_note(note_id, new_title, note[2])
+
+    def move_note_up(self):
+        """Переместить заметку вверх среди соседей"""
+        item = self.tree.currentItem()
+        if not item:
+            return
+        parent = item.parent() or self.tree.invisibleRootItem()
+        index = parent.indexOfChild(item)
+        if index > 0:
+            # Получаем ID заметок для обновления порядка
+            current_id = item.data(0, Qt.ItemDataRole.UserRole)
+            prev_item = parent.child(index - 1)
+            prev_id = prev_item.data(0, Qt.ItemDataRole.UserRole)
+            
+            # Обновляем порядок в базе данных
+            self.db.update_note_order(current_id, index - 1)
+            self.db.update_note_order(prev_id, index)
+            
+            # Обновляем отображение
+            parent.takeChild(index)
+            parent.insertChild(index - 1, item)
+            self.tree.setCurrentItem(item)
+
+    def move_note_down(self):
+        """Переместить заметку вниз среди соседей"""
+        item = self.tree.currentItem()
+        if not item:
+            return
+        parent = item.parent() or self.tree.invisibleRootItem()
+        index = parent.indexOfChild(item)
+        if 0 <= index < parent.childCount() - 1:
+            # Получаем ID заметок для обновления порядка
+            current_id = item.data(0, Qt.ItemDataRole.UserRole)
+            next_item = parent.child(index + 1)
+            next_id = next_item.data(0, Qt.ItemDataRole.UserRole)
+            
+            # Обновляем порядок в базе данных
+            self.db.update_note_order(current_id, index + 1)
+            self.db.update_note_order(next_id, index)
+            
+            # Обновляем отображение
+            parent.takeChild(index)
+            parent.insertChild(index + 1, item)
+            self.tree.setCurrentItem(item)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
