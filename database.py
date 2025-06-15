@@ -4,9 +4,14 @@ import os
 import sys
 
 class NotesDB:
-    def __init__(self, db_path="notes.db"):
+    def __init__(self, db_path=None):
+        if db_path is None:
+            db_path = 'notes.db'
         self.db_path = db_path
-        self.conn = sqlite3.connect(db_path)
+        # Если файл базы данных не существует, создаём его
+        if not os.path.exists(self.db_path):
+            open(self.db_path, 'a').close()
+        self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
         self.create_tables()
