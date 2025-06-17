@@ -75,7 +75,9 @@ class NotesApp(QMainWindow):
             # Если приложение запущено из исходников
             self.SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.ini')
         
-        print(f"Путь к файлу настроек: {self.SETTINGS_FILE}")
+        # Загружаем текущий язык интерфейса
+        config = Config()
+        self.current_language = config.get('language', 'Русский')
         
         # Проверяем наличие файла настроек и устанавливаем размеры окна
         if os.path.exists(self.SETTINGS_FILE):
@@ -100,19 +102,22 @@ class NotesApp(QMainWindow):
                 
                 # Инициализируем базу данных
                 self.init_db(db_path)
-                print("Настройки успешно загружены")
             except Exception as e:
-                print(f"Ошибка при загрузке настроек: {e}")
+                QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить настройки!\n{str(e)}")
                 self.set_default_settings()
         else:
-            print("Файл настроек не найден, устанавливаем значения по умолчанию")
             self.set_default_settings()
         
         # Настройка интерфейса
         self.create_actions()
         self.setup_ui()
         
-        self.setWindowTitle('SkimNote')
+        # Устанавливаем заголовок окна в зависимости от языка
+        if self.current_language == 'English':
+            self.setWindowTitle('SkimNote')
+        else:
+            self.setWindowTitle('SkimNote')
+            
         self.setWindowIcon(QIcon(os.path.join(ICONS_DIR, 'app.ico')))
         
         # Применяем тему
@@ -643,98 +648,24 @@ class NotesApp(QMainWindow):
             self.db_path_edit.setText(file_name)
             
     def show_settings(self):
-        """Показать окно настроек"""
-        try:
-            dialog = QDialog(self)
-            dialog.setWindowTitle("Настройки")
-            dialog.setModal(True)
+        """Показать диалог настроек"""
+        dialog = SettingsDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Применяем новые настройки
+            self.font_size = dialog.font_size.value()
+            self.font_family = 'Segoe UI'  # Можно добавить выбор шрифта в настройки
+            self.apply_font()
             
-            layout = QVBoxLayout(dialog)
+            # Проверяем, изменился ли язык
+            config = Config()
+            new_language = config.get('language', 'Русский')
+            if new_language != self.current_language:
+                self.current_language = new_language
+                QMessageBox.information(self, "Изменение языка", 
+                    "Для применения нового языка интерфейса необходимо перезапустить приложение.")
             
-            # Настройки базы данных
-            db_group = QGroupBox("База данных")
-            db_layout = QVBoxLayout()
-            
-            db_path_layout = QHBoxLayout()
-            db_path_label = QLabel("Путь к базе данных:")
-            self.db_path_edit = QLineEdit(self.db.db_path)
-            db_path_button = QPushButton("Обзор...")
-            db_path_button.clicked.connect(lambda: self.select_db_file(dialog))
-            db_path_layout.addWidget(db_path_label)
-            db_path_layout.addWidget(self.db_path_edit)
-            db_path_layout.addWidget(db_path_button)
-            db_layout.addLayout(db_path_layout)
-            
-            db_group.setLayout(db_layout)
-            layout.addWidget(db_group)
-            
-            # Настройки шрифта
-            font_group = QGroupBox("Шрифт")
-            font_layout = QVBoxLayout()
-            
-            font_size_layout = QHBoxLayout()
-            font_size_label = QLabel("Размер шрифта:")
-            font_size_spin = QSpinBox()
-            font_size_spin.setRange(8, 72)
-            font_size_spin.setValue(self.font_size)
-            font_size_layout.addWidget(font_size_label)
-            font_size_layout.addWidget(font_size_spin)
-            font_layout.addLayout(font_size_layout)
-            
-            font_family_layout = QHBoxLayout()
-            font_family_label = QLabel("Шрифт:")
-            font_family_combo = QComboBox()
-            font_family_combo.addItems(QFontDatabase.families())
-            font_family_combo.setCurrentText(self.font_family)
-            font_family_layout.addWidget(font_family_label)
-            font_family_layout.addWidget(font_family_combo)
-            font_layout.addLayout(font_family_layout)
-            
-            font_group.setLayout(font_layout)
-            layout.addWidget(font_group)
-            
-            # Кнопки
-            buttons_layout = QHBoxLayout()
-            save_button = QPushButton("Сохранить")
-            save_button.clicked.connect(lambda: self.save_settings(
-                dialog,
-                self.db_path_edit.text(),
-                font_size_spin.value(),
-                font_family_combo.currentText()
-            ))
-            cancel_button = QPushButton("Отмена")
-            cancel_button.clicked.connect(dialog.reject)
-            buttons_layout.addWidget(save_button)
-            buttons_layout.addWidget(cancel_button)
-            layout.addLayout(buttons_layout)
-            
-            dialog.exec()
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть окно настроек: {str(e)}")
-        
-    def save_settings(self, dialog, db_path, font_size, font_family):
-        import traceback
-        config = configparser.ConfigParser()
-        config['main'] = {
-            'db_path': db_path,
-            'font_size': str(font_size),
-            'font_family': font_family
-        }
-        try:
-            with open(self.SETTINGS_FILE, 'w', encoding='utf-8') as f:
-                config.write(f)
-            # QMessageBox.information(self, "Путь к settings.ini", f"Настройки сохранены по пути:\n{os.path.abspath(self.SETTINGS_FILE)}")
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить настройки!\n{e}\n{traceback.format_exc()}")
-            return
-        # Применяем настройки
-        self.font_size = font_size
-        self.font_family = font_family
-        self.db.close()
-        self.db = NotesDB(db_path)
-        self.load_notes()
-        self.apply_font()
-        dialog.accept()
+            # Применяем тему
+            self.apply_theme()
 
     def handle_f3(self):
         """Обработка нажатия F3"""
@@ -1129,16 +1060,14 @@ class NotesApp(QMainWindow):
             try:
                 os.makedirs(settings_dir)
             except Exception as e:
-                print(f"Ошибка при создании директории для настроек: {e}")
+                QMessageBox.critical(self, "Ошибка", f"Не удалось создать директорию для настроек!\n{str(e)}")
                 return
         
         # Сохраняем файл
         try:
             with open(self.SETTINGS_FILE, 'w', encoding='utf-8') as f:
                 config.write(f)
-            print(f"Настройки сохранены в файл: {self.SETTINGS_FILE}")
         except Exception as e:
-            print(f"Ошибка при сохранении настроек: {e}")
             QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить настройки!\n{str(e)}")
 
     def set_default_settings(self):

@@ -18,6 +18,15 @@ class SettingsDialog(QDialog):
         """Настройка пользовательского интерфейса"""
         layout = QVBoxLayout(self)
         
+        # Язык интерфейса
+        lang_layout = QHBoxLayout()
+        lang_label = QLabel("Язык интерфейса:")
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItems(["Русский", "English"])
+        lang_layout.addWidget(lang_label)
+        lang_layout.addWidget(self.lang_combo)
+        layout.addLayout(lang_layout)
+        
         # Путь к базе данных
         db_layout = QHBoxLayout()
         db_label = QLabel("Путь к базе данных:")
@@ -81,6 +90,11 @@ class SettingsDialog(QDialog):
         """Загрузка настроек"""
         settings = self.config.get_settings()
         
+        # Загружаем язык интерфейса
+        lang_index = self.lang_combo.findText(settings.get('language', 'Русский'))
+        if lang_index >= 0:
+            self.lang_combo.setCurrentIndex(lang_index)
+        
         # Загружаем путь к базе данных
         self.db_path_edit.setText(settings.get('db_path', 'notes.db'))
         
@@ -99,6 +113,7 @@ class SettingsDialog(QDialog):
     def save_settings(self):
         """Сохранение настроек"""
         settings = {
+            'language': self.lang_combo.currentText(),
             'db_path': self.db_path_edit.text(),
             'theme': self.theme_combo.currentText(),
             'font_size': self.font_size.value(),

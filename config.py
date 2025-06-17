@@ -5,6 +5,7 @@ class Config:
     def __init__(self):
         self.config_file = "settings.json"
         self.default_settings = {
+            'language': 'Русский',
             'db_path': 'notes.db',
             'theme': 'Системная',
             'font_size': 12,
