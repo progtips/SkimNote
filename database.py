@@ -102,8 +102,9 @@ class NotesDB:
             return self.cursor.fetchall()
 
     def get_note(self, note_id):
+        """Получение заметки по ID"""
         with self.conn:
-            self.cursor.execute('SELECT id, title, content, parent_id, created_at, updated_at FROM notes WHERE id = ?', (note_id,))
+            self.cursor.execute("SELECT id, title, content, parent_id, order_index FROM notes WHERE id = ?", (note_id,))
             return self.cursor.fetchone()
 
     def delete_note(self, note_id):
@@ -124,6 +125,16 @@ class NotesDB:
         with self.conn:
             self.cursor.execute("SELECT id, title, content, parent_id, order_index FROM notes ORDER BY order_index, id")
             return self.cursor.fetchall()
+
+    def save_note(self, note_id, title, content):
+        """Сохранение заметки"""
+        now = datetime.now()
+        with self.conn:
+            self.cursor.execute(
+                'UPDATE notes SET title = ?, content = ?, updated_at = ? WHERE id = ?',
+                (title, content, now, note_id)
+            )
+            self.conn.commit()
 
     def close(self):
         if hasattr(self, 'conn'):

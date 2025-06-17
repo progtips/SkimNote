@@ -15,6 +15,7 @@ import sqlite3
 import configparser
 import shutil
 from datetime import datetime, timedelta
+import socket
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
@@ -96,6 +97,9 @@ class NotesApp(QMainWindow):
         
         # Выполняем бэкап базы данных
         self.backup_db()
+
+        # Подключаем обработчик изменения текста
+        self.editor.textChanged.connect(self.on_text_changed)
 
     def load_settings(self):
         import configparser
@@ -259,46 +263,46 @@ class NotesApp(QMainWindow):
         toolbar.addAction(delete_action)
 
     def setup_ui(self):
-        """Настройка пользовательского интерфейса"""
-        # Создаем центральный виджет
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        """Настройка интерфейса"""
+        # Создаем главное окно
+        self.setWindowTitle("SkimNote")
+        self.setGeometry(100, 100, 1200, 800)
         
-        # Создаем главный layout
-        main_layout = QVBoxLayout(central_widget)
+        # Создаем главный виджет и layout
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        layout = QHBoxLayout(main_widget)
         
-        # Создаем меню
-        self.create_menu()
-        
-        # Создаем сплиттер для разделения дерева и редактора
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        main_layout.addWidget(splitter)
+        # Создаем левую панель с деревом заметок
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
         
         # Создаем дерево заметок
         self.tree = QTreeWidget()
-        self.tree.setHeaderHidden(True)
-        self.tree.setMinimumWidth(200)
+        self.tree.setHeaderHidden(True)  # Скрываем заголовок
         self.tree.itemClicked.connect(self.on_note_selected)
         self.tree.itemDoubleClicked.connect(self.on_note_double_clicked)
-        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.tree.customContextMenuRequested.connect(self.show_context_menu)
+        self.tree.currentItemChanged.connect(self.on_note_selected)
         self.tree.itemChanged.connect(self.on_item_changed)
-        splitter.addWidget(self.tree)
+        left_layout.addWidget(self.tree)
+        
+        # Добавляем левую панель в главный layout
+        layout.addWidget(left_panel, 1)
+        
+        # Создаем правую панель с редактором
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
         
         # Создаем редактор
-        editor_layout = QVBoxLayout()
         self.editor = QTextEdit()
-        self.editor.textChanged.connect(self.on_content_changed)
-        editor_layout.addWidget(self.editor)
+        self.editor.textChanged.connect(self.on_text_changed)
+        right_layout.addWidget(self.editor)
         
-        # Создаем контейнер для редактора
-        editor_container = QWidget()
-        editor_container.setLayout(editor_layout)
-        splitter.addWidget(editor_container)
+        # Добавляем правую панель в главный layout
+        layout.addWidget(right_panel, 2)
         
-        # Устанавливаем соотношение размеров
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
+        # Создаем меню
+        self.create_menu()
         
         # Создаем панель инструментов
         self.create_toolbar()
@@ -320,6 +324,7 @@ class NotesApp(QMainWindow):
             if parent_id == 1:  # Если это заметка верхнего уровня
                 item = QTreeWidgetItem(self.tree, [title])
                 item.setData(0, Qt.ItemDataRole.UserRole, note_id)
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)  # Делаем элемент редактируемым
                 tree_items[note_id] = item
         
         # Затем добавляем дочерние элементы
@@ -331,6 +336,7 @@ class NotesApp(QMainWindow):
                 if parent_item:
                     item = QTreeWidgetItem(parent_item, [title])
                     item.setData(0, Qt.ItemDataRole.UserRole, note_id)
+                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)  # Делаем элемент редактируемым
                     tree_items[note_id] = item
         
         # Раскрываем все элементы дерева
@@ -385,17 +391,22 @@ class NotesApp(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось создать заметку: {str(e)}")
 
-    def save_current_note(self, force=False):
+    def save_current_note(self):
         """Сохранение текущей заметки"""
-        if self.current_note_id and (self.content_modified or force):
-            content = self.editor.toPlainText()
-            try:
-                note = self.db.get_note(self.current_note_id)
-                if note:
-                    self.db.update_note(self.current_note_id, note[1], content)
-                    self.content_modified = False
-            except Exception as e:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить заметку: {str(e)}")
+        if not self.current_note_id or not self.content_modified:
+            return
+            
+        content = self.editor.toPlainText()
+        
+        try:
+            # Получаем текущую заметку
+            note = self.db.get_note(self.current_note_id)
+            if note:
+                # Сохраняем с тем же заголовком
+                self.db.save_note(self.current_note_id, note[1], content)
+                self.content_modified = False
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить заметку: {str(e)}")
 
     def delete_note(self):
         """Удаление заметки"""
@@ -423,20 +434,36 @@ class NotesApp(QMainWindow):
 
     def on_note_selected(self, item):
         """Обработка выбора заметки"""
-        self.save_current_note()
+        # Сохраняем предыдущую заметку
+        if self.current_note_id and self.content_modified:
+            self.save_current_note()
         
+        if not item:
+            return
+            
         note_id = item.data(0, Qt.ItemDataRole.UserRole)
-        if note_id:
-            note = self.db.get_note(note_id)
-            if note:
-                self.current_note_id = note_id
-                self.current_parent_id = note[3]
-                self.editor.setPlainText(note[2])
-                self.content_modified = False
-                
-    def on_note_double_clicked(self, item):
+        if not note_id:
+            return
+            
+        # Получаем данные заметки из базы
+        note = self.db.get_note(note_id)
+        if not note:
+            return
+            
+        # Отображаем текст заметки
+        self.editor.setPlainText(note[2])  # content
+        
+        # Сохраняем ID текущей заметки и родителя
+        self.current_note_id = note_id
+        self.current_parent_id = note[3]  # parent_id
+        
+        # Сбрасываем флаг изменения
+        self.content_modified = False
+
+    def on_note_double_clicked(self, item, column):
         """Обработка двойного клика по заметке"""
-        self.start_rename()
+        if column == 0:  # Только для заголовка
+            self.tree.editItem(item, column)
 
     def show_context_menu(self, position):
         """Показ контекстного меню"""
@@ -455,53 +482,38 @@ class NotesApp(QMainWindow):
         
         menu.exec(self.tree.mapToGlobal(position))
 
-    def on_content_changed(self):
-        """Обработка изменения содержимого заметки"""
-        if not self.editing_title:
-            self.content_modified = True
+    def on_text_changed(self):
+        """Обработчик изменения текста"""
+        self.content_modified = True
 
     def closeEvent(self, event):
-        # Сохраняем размеры окна при закрытии
-        import configparser
-        config = configparser.ConfigParser()
-        config.read(self.SETTINGS_FILE, encoding='utf-8')
-        if 'main' not in config:
-            config['main'] = {}
-        config['main']['window_width'] = str(self.width())
-        config['main']['window_height'] = str(self.height())
-        config['main']['font_size'] = str(self.font_size)
-        config['main']['font_family'] = self.font_family
-        config['main']['db_path'] = self.db.db_path
-        with open(self.SETTINGS_FILE, 'w', encoding='utf-8') as f:
-            config.write(f)
-        # Принудительно завершаем редактирование заголовка, если оно идёт
-        if self.editing_title:
-            item = self.tree.currentItem()
-            self.tree.closePersistentEditor(item, 0)
-            self.editing_title = False
-            # Принудительно сохраняем заголовок
-            if hasattr(self, 'on_item_changed'):
-                self.on_item_changed(item, 0)
-        self.save_current_note(force=True)
+        """Обработка закрытия окна"""
+        self.save_current_note()
         event.accept()
 
     def start_rename(self):
-        """Начало переименования заметки"""
+        """Начать редактирование заголовка"""
         current_item = self.tree.currentItem()
-        if not current_item:
-            return
-            
-        self.editing_title = True
-        current_item.setFlags(current_item.flags() | Qt.ItemFlag.ItemIsEditable)
-        self.tree.editItem(current_item, 0)
+        if current_item:
+            self.tree.setEditTriggers(QTreeWidget.EditTrigger.DoubleClicked | QTreeWidget.EditTrigger.EditKeyPressed)
+            self.tree.editItem(current_item, 0)
+            self.tree.setEditTriggers(QTreeWidget.EditTrigger.NoEditTriggers)
 
     def show_about(self):
-        """Показ информации о программе"""
-        QMessageBox.about(self, "О программе",
-                         "SkimNote - Менеджер заметок\n\n"
-                         "Версия 1.0\n\n"
-                         "Простой менеджер заметок с поддержкой "
-                         "иерархической структуры.")
+        """Показать информацию о программе"""
+        about_text = (
+            "SkimNote - программа для создания заметок<br><br>"
+            "Версия 1.0<br><br>"
+            "Сайт:<br>"
+            "<a href='https://progtips.ru/skimnote'>https://progtips.ru/skimnote</a><br><br>"
+            "© 2025 Все права защищены"
+        )
+        msg = QMessageBox(self)
+        msg.setWindowTitle("О программе")
+        msg.setText(about_text)
+        msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.exec()
 
     def select_db_file(self, dialog):
         """Выбор файла базы данных"""
@@ -685,7 +697,7 @@ class NotesApp(QMainWindow):
         content = self.editor.toPlainText()
         new_content = content[:start] + replace_text + content[end:]
         self.editor.setPlainText(new_content)
-        self.on_content_changed()
+        self.on_text_changed()
         # после замены обновляем результаты поиска
         self.collect_search_results(search_text)
 
@@ -713,7 +725,7 @@ class NotesApp(QMainWindow):
             content = self.editor.toPlainText()
             new_content = content[:start] + replace_text + content[end:]
             self.editor.setPlainText(new_content)
-            self.on_content_changed()
+            self.on_text_changed()
         QMessageBox.information(self, "Замена", "Заменено вхождений: " + str(len(self.search_results)))
 
     def show_replace_all_dialog(self):
@@ -877,22 +889,38 @@ class NotesApp(QMainWindow):
             QMessageBox.information(self, "Восстановление", "База данных успешно восстановлена.")
 
     def keyPressEvent(self, event):
+        """Обработка нажатия клавиш"""
         if event.key() == Qt.Key.Key_Escape:
             self.close()
         elif event.key() == Qt.Key.Key_Up and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
             self.move_note_up()
         elif event.key() == Qt.Key.Key_Down and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
             self.move_note_down()
+        elif event.key() == Qt.Key.Key_F2:
+            current_item = self.tree.currentItem()
+            if current_item:
+                self.tree.editItem(current_item, 0)
         else:
             super().keyPressEvent(event)
 
     def on_item_changed(self, item, column):
-        """Сохраняет заголовок заметки в базе данных при изменении"""
+        """Обработка изменения элемента дерева"""
+        if not item or column != 0:
+            return
+            
         note_id = item.data(0, Qt.ItemDataRole.UserRole)
+        if not note_id:
+            return
+            
         new_title = item.text(0)
-        note = self.db.get_note(note_id)
-        if note and note[1] != new_title:
-            self.db.update_note(note_id, new_title, note[2])
+        try:
+            # Получаем текущую заметку
+            note = self.db.get_note(note_id)
+            if note:
+                # Сохраняем с новым заголовком
+                self.db.save_note(note_id, new_title, note[2])
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить заголовок: {str(e)}")
 
     def move_note_up(self):
         """Переместить заметку вверх среди соседей"""
@@ -938,7 +966,28 @@ class NotesApp(QMainWindow):
             parent.insertChild(index + 1, item)
             self.tree.setCurrentItem(item)
 
+    def on_title_changed(self):
+        """Обработчик изменения заголовка"""
+        if not self.current_note_id:
+            return
+            
+        # Обновляем заголовок в дереве
+        current_item = self.tree.currentItem()
+        if current_item:
+            current_item.setText(0, self.title_input.text())
+            self.content_modified = True
+            # Сохраняем изменения в базу данных
+            self.save_current_note()
+
 if __name__ == '__main__':
+    # Проверка на единственный экземпляр программы
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(('localhost', 12345))
+    except socket.error:
+        QMessageBox.critical(None, "Ошибка", "Программа уже запущена")
+        sys.exit(1)
+        
     app = QApplication(sys.argv)
     window = NotesApp()
     window.show()
