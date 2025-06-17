@@ -17,11 +17,9 @@ import shutil
 from datetime import datetime, timedelta
 import socket
 
-if getattr(sys, 'frozen', False):
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ICONS_DIR = os.path.join(BASE_DIR, "icons")
+# Константы
+ICONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'icons')
+SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.ini')
 
 class SearchDialog(QDialog):
     def __init__(self, parent=None, replace_mode=False, title=None):
@@ -61,13 +59,73 @@ class SearchDialog(QDialog):
         self.search_edit.setFocus()
 
 class NotesApp(QMainWindow):
-    SETTINGS_FILE = os.path.join(BASE_DIR, 'settings.ini')
+    SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.ini')
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("SkimNote")
-        self.default_width = 1200
-        self.default_height = 800
+        
+        # Инициализация основных переменных
+        self.init_ui()
+        
+        # Определяем путь к файлу настроек
+        if getattr(sys, 'frozen', False):
+            # Если приложение запущено как exe
+            self.SETTINGS_FILE = os.path.join(os.path.dirname(sys.executable), 'settings.ini')
+        else:
+            # Если приложение запущено из исходников
+            self.SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.ini')
+        
+        print(f"Путь к файлу настроек: {self.SETTINGS_FILE}")
+        
+        # Проверяем наличие файла настроек и устанавливаем размеры окна
+        if os.path.exists(self.SETTINGS_FILE):
+            try:
+                # Загружаем настройки из файла
+                config = configparser.ConfigParser()
+                config.read(self.SETTINGS_FILE, encoding='utf-8')
+                
+                # Загружаем размеры и позицию окна
+                x = config.getint('Window', 'x', fallback=100)
+                y = config.getint('Window', 'y', fallback=100)
+                width = config.getint('Window', 'width', fallback=800)
+                height = config.getint('Window', 'height', fallback=600)
+                
+                # Устанавливаем позицию и размер окна
+                self.setGeometry(x, y, width, height)
+                
+                # Загружаем остальные настройки
+                self.font_size = config.getint('Font', 'size', fallback=12)
+                self.font_family = config.get('Font', 'family', fallback='Segoe UI')
+                db_path = config.get('Database', 'path', fallback='notes.db')
+                
+                # Инициализируем базу данных
+                self.init_db(db_path)
+                print("Настройки успешно загружены")
+            except Exception as e:
+                print(f"Ошибка при загрузке настроек: {e}")
+                self.set_default_settings()
+        else:
+            print("Файл настроек не найден, устанавливаем значения по умолчанию")
+            self.set_default_settings()
+        
+        # Настройка интерфейса
+        self.create_actions()
+        self.setup_ui()
+        
+        self.setWindowTitle('SkimNote')
+        self.setWindowIcon(QIcon(os.path.join(ICONS_DIR, 'app.ico')))
+        
+        # Применяем тему
+        self.apply_theme()
+        
+        # Показываем окно
+        self.show()
+
+    def init_ui(self):
+        """Инициализация основных переменных и настроек интерфейса"""
+        # Инициализация основных переменных
+        self.default_width = 800
+        self.default_height = 600
         self.font_size = 12
         self.font_family = "Segoe UI"
         self.db = None  # Инициализация будет в load_settings
@@ -79,42 +137,88 @@ class NotesApp(QMainWindow):
         self.editing_title = False
         self.last_search_text = ""
         self.last_replace_text = ""
+        self.restored_geometry = False
 
-        # Загрузка настроек (инициализация self.db и размеров окна)
-        self.load_settings()
-
-        # Настройка интерфейса
-        self.setup_ui()
-        self.setup_shortcuts()
-        self.load_notes()
-        
-        # Центрируем окно (если не восстановили размеры)
-        if not self.restored_geometry:
-            self.center_on_screen()
-        
-        # Применяем настройки
-        self.apply_font()
-        
-        # Выполняем бэкап базы данных
-        self.backup_db()
-
-        # Подключаем обработчик изменения текста
-        self.editor.textChanged.connect(self.on_text_changed)
+    def init_db(self, db_path='notes.db'):
+        """Инициализация базы данных"""
+        self.db = NotesDB(db_path)
 
     def load_settings(self):
+        """Загрузка настроек из файла"""
         import configparser
         config = configparser.ConfigParser()
-        config.read(self.SETTINGS_FILE, encoding='utf-8')
-        self.font_size = int(config.get('main', 'font_size', fallback='12'))
-        self.font_family = config.get('main', 'font_family', fallback='Segoe UI')
-        db_path = config.get('main', 'db_path', fallback='notes.db')
-        # Восстанавливаем размеры окна
-        width = config.getint('main', 'window_width', fallback=self.default_width)
-        height = config.getint('main', 'window_height', fallback=self.default_height)
-        self.resize(width, height)
-        self.restored_geometry = True
-        # Инициализация базы данных по пути из настроек
-        self.db = NotesDB(db_path)
+        
+        if os.path.exists(self.SETTINGS_FILE):
+            config.read(self.SETTINGS_FILE, encoding='utf-8')
+            self.font_size = int(config.get('main', 'font_size', fallback='12'))
+            self.font_family = config.get('main', 'font_family', fallback='Segoe UI')
+            db_path = config.get('main', 'db_path', fallback='notes.db')
+            
+            # Инициализируем базу данных с путем из настроек
+            if self.db is None or self.db.db_path != db_path:
+                self.init_db(db_path)
+        else:
+            # Используем значения по умолчанию
+            self.font_size = 12
+            self.font_family = "Segoe UI"
+            self.init_db('notes.db')
+
+    def create_actions(self):
+        """Создание действий для меню и панели инструментов"""
+        # Действия для файлового меню
+        self.change_db_action = QAction("Сменить базу данных", self)
+        self.change_db_action.triggered.connect(self.change_db)
+        
+        self.restore_db_action = QAction("Восстановление базы данных", self)
+        self.restore_db_action.triggered.connect(self.restore_db)
+        
+        self.exit_action = QAction("Выход", self)
+        self.exit_action.setShortcut("Alt+F4")
+        self.exit_action.triggered.connect(self.close)
+        
+        # Действия для меню заметок
+        self.new_note_action = QAction("Новая заметка", self)
+        icon_path = os.path.join(ICONS_DIR, "new_note.svg")
+        if os.path.exists(icon_path):
+            self.new_note_action.setIcon(QIcon(icon_path))
+        self.new_note_action.setShortcut("Insert")
+        self.new_note_action.triggered.connect(self.new_note)
+        
+        self.new_subnote_action = QAction("Новая вложенная заметка", self)
+        icon_path = os.path.join(ICONS_DIR, "new_subnote.svg")
+        if os.path.exists(icon_path):
+            self.new_subnote_action.setIcon(QIcon(icon_path))
+        self.new_subnote_action.setShortcut("Alt+Insert")
+        self.new_subnote_action.triggered.connect(self.new_subnote)
+        
+        self.delete_note_action = QAction("Удалить заметку", self)
+        icon_path = os.path.join(ICONS_DIR, "delete.svg")
+        if os.path.exists(icon_path):
+            self.delete_note_action.setIcon(QIcon(icon_path))
+        self.delete_note_action.setShortcut("Delete")
+        self.delete_note_action.triggered.connect(self.delete_note)
+        
+        # Действия для поиска
+        self.find_action = QAction("Найти", self)
+        self.find_action.setShortcut("Ctrl+F")
+        self.find_action.triggered.connect(self.show_search_dialog)
+        
+        self.find_next_action = QAction("Найти далее", self)
+        self.find_next_action.setShortcut("F3")
+        self.find_next_action.triggered.connect(self.find_next)
+        
+        self.replace_action = QAction("Заменить", self)
+        self.replace_action.setShortcut("Ctrl+H")
+        self.replace_action.triggered.connect(self.show_replace_dialog)
+        
+        # Действия для перемещения заметок
+        self.move_up_action = QAction("Переместить вверх", self)
+        self.move_up_action.setShortcut("Ctrl+Up")
+        self.move_up_action.triggered.connect(self.move_note_up)
+        
+        self.move_down_action = QAction("Переместить вниз", self)
+        self.move_down_action.setShortcut("Ctrl+Down")
+        self.move_down_action.triggered.connect(self.move_note_down)
 
     def apply_font(self):
         """Применение шрифта ко всем основным элементам интерфейса"""
@@ -125,6 +229,14 @@ class NotesApp(QMainWindow):
             self.tree.setFont(font)
         if hasattr(self, 'db_path_edit'):
             self.db_path_edit.setFont(font)
+
+    def apply_theme(self):
+        """Применение темы к элементам интерфейса"""
+        # Применяем шрифт
+        self.apply_font()
+        
+        # Если в будущем потребуется добавить другие настройки темы,
+        # их можно будет добавить здесь (цвета, стили и т.д.)
 
     def setup_shortcuts(self):
         """Настройка горячих клавиш"""
@@ -264,10 +376,6 @@ class NotesApp(QMainWindow):
 
     def setup_ui(self):
         """Настройка интерфейса"""
-        # Создаем главное окно
-        self.setWindowTitle("SkimNote")
-        self.setGeometry(100, 100, 1200, 800)
-        
         # Создаем главный виджет и layout
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
@@ -306,6 +414,9 @@ class NotesApp(QMainWindow):
         
         # Создаем панель инструментов
         self.create_toolbar()
+        
+        # Загружаем заметки
+        self.load_notes()
 
     def load_notes(self):
         """Загрузка заметок из базы данных"""
@@ -488,7 +599,12 @@ class NotesApp(QMainWindow):
 
     def closeEvent(self, event):
         """Обработка закрытия окна"""
+        # Сохраняем текущую заметку
         self.save_current_note()
+        
+        # Сохраняем настройки
+        self.save_window_settings()
+        
         event.accept()
 
     def start_rename(self):
@@ -751,10 +867,15 @@ class NotesApp(QMainWindow):
         return self.cursor.fetchone()
 
     def center_on_screen(self):
-        screen = self.screen().geometry()
+        """Центрирование окна на экране"""
+        # Получаем геометрию основного экрана
+        screen = QApplication.primaryScreen().geometry()
+        # Получаем размеры окна
         size = self.geometry()
+        # Вычисляем позицию для центрирования
         x = (screen.width() - size.width()) // 2
         y = (screen.height() - size.height()) // 2
+        # Перемещаем окно
         self.move(x, y)
 
     def change_db(self):
@@ -978,6 +1099,59 @@ class NotesApp(QMainWindow):
             self.content_modified = True
             # Сохраняем изменения в базу данных
             self.save_current_note()
+
+    def save_window_settings(self):
+        """Сохранение настроек окна и других параметров в файл"""
+        config = configparser.ConfigParser()
+        
+        # Сохраняем размеры и позицию окна
+        config['Window'] = {
+            'x': str(self.x()),
+            'y': str(self.y()),
+            'width': str(self.width()),
+            'height': str(self.height())
+        }
+        
+        # Сохраняем настройки шрифта
+        config['Font'] = {
+            'size': str(self.font_size),
+            'family': self.font_family
+        }
+        
+        # Сохраняем путь к базе данных
+        config['Database'] = {
+            'path': self.db.db_path
+        }
+        
+        # Создаем директорию для файла настроек, если она не существует
+        settings_dir = os.path.dirname(self.SETTINGS_FILE)
+        if not os.path.exists(settings_dir):
+            try:
+                os.makedirs(settings_dir)
+            except Exception as e:
+                print(f"Ошибка при создании директории для настроек: {e}")
+                return
+        
+        # Сохраняем файл
+        try:
+            with open(self.SETTINGS_FILE, 'w', encoding='utf-8') as f:
+                config.write(f)
+            print(f"Настройки сохранены в файл: {self.SETTINGS_FILE}")
+        except Exception as e:
+            print(f"Ошибка при сохранении настроек: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить настройки!\n{str(e)}")
+
+    def set_default_settings(self):
+        """Установка настроек по умолчанию"""
+        # Устанавливаем значения по умолчанию
+        self.setGeometry(100, 100, 800, 600)
+        self.center_on_screen()
+        self.font_size = 12
+        self.font_family = 'Segoe UI'
+        self.init_db('notes.db')
+        
+        # Создаем файл настроек со значениями по умолчанию
+        self.save_window_settings()
 
 if __name__ == '__main__':
     # Проверка на единственный экземпляр программы
