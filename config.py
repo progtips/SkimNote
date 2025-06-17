@@ -1,9 +1,16 @@
-import json
 import os
+import configparser
+import sys
 
 class Config:
     def __init__(self):
-        self.config_file = "settings.json"
+        if getattr(sys, 'frozen', False):
+            # Если приложение запущено как exe
+            self.config_file = os.path.join(os.path.dirname(sys.executable), 'settings.ini')
+        else:
+            # Если приложение запущено из исходников
+            self.config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.ini')
+            
         self.default_settings = {
             'language': 'Русский',
             'db_path': 'notes.db',
@@ -19,21 +26,50 @@ class Config:
             return self.default_settings
             
         try:
-            with open(self.config_file, 'r', encoding='utf-8') as f:
-                settings = json.load(f)
-                # Обновляем настройки по умолчанию
-                for key, value in self.default_settings.items():
-                    if key not in settings:
-                        settings[key] = value
-                return settings
+            config = configparser.ConfigParser()
+            config.read(self.config_file, encoding='utf-8')
+            
+            # Получаем настройки из секции main
+            if 'main' not in config:
+                return self.default_settings
+                
+            settings = {}
+            for key, value in self.default_settings.items():
+                if key in config['main']:
+                    # Преобразуем строковые значения в соответствующие типы
+                    if isinstance(value, bool):
+                        settings[key] = config['main'].getboolean(key)
+                    elif isinstance(value, int):
+                        settings[key] = config['main'].getint(key)
+                    else:
+                        settings[key] = config['main'][key]
+                else:
+                    settings[key] = value
+                    
+            return settings
         except Exception:
             return self.default_settings
             
     def save_settings(self, settings):
         """Сохранение настроек в файл"""
         try:
+            config = configparser.ConfigParser()
+            
+            # Создаем секцию main
+            config['main'] = {}
+            
+            # Сохраняем все настройки
+            for key, value in settings.items():
+                config['main'][key] = str(value)
+            
+            # Создаем директорию для файла настроек, если она не существует
+            settings_dir = os.path.dirname(self.config_file)
+            if not os.path.exists(settings_dir):
+                os.makedirs(settings_dir)
+                
+            # Сохраняем файл
             with open(self.config_file, 'w', encoding='utf-8') as f:
-                json.dump(settings, f, ensure_ascii=False, indent=4)
+                config.write(f)
             return True
         except Exception:
             return False

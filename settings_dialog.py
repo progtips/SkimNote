@@ -2,15 +2,13 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                             QPushButton, QComboBox, QCheckBox, QSpinBox, QLineEdit, QFileDialog)
 from PyQt6.QtCore import Qt
 from config import Config
+from translations import TRANSLATIONS
 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Настройки")
-        self.setModal(True)
-        
         self.config = Config()
-        
+        self.current_language = self.config.get('language', 'Русский')
         self.setup_ui()
         self.load_settings()
         
@@ -20,7 +18,7 @@ class SettingsDialog(QDialog):
         
         # Язык интерфейса
         lang_layout = QHBoxLayout()
-        lang_label = QLabel("Язык интерфейса:")
+        lang_label = QLabel(TRANSLATIONS[self.current_language]['settings_language'])
         self.lang_combo = QComboBox()
         self.lang_combo.addItems(["Русский", "English"])
         lang_layout.addWidget(lang_label)
@@ -29,9 +27,9 @@ class SettingsDialog(QDialog):
         
         # Путь к базе данных
         db_layout = QHBoxLayout()
-        db_label = QLabel("Путь к базе данных:")
+        db_label = QLabel(TRANSLATIONS[self.current_language]['settings_db_path'])
         self.db_path_edit = QLineEdit()
-        self.db_browse_btn = QPushButton("...")
+        self.db_browse_btn = QPushButton(TRANSLATIONS[self.current_language]['settings_browse'])
         self.db_browse_btn.clicked.connect(self.browse_db_path)
         db_layout.addWidget(db_label)
         db_layout.addWidget(self.db_path_edit)
@@ -40,16 +38,20 @@ class SettingsDialog(QDialog):
         
         # Тема оформления
         theme_layout = QHBoxLayout()
-        theme_label = QLabel("Тема оформления:")
+        theme_label = QLabel(TRANSLATIONS[self.current_language]['settings_theme'])
         self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["Светлая", "Темная", "Системная"])
+        self.theme_combo.addItems([
+            TRANSLATIONS[self.current_language]['settings_theme_light'],
+            TRANSLATIONS[self.current_language]['settings_theme_dark'],
+            TRANSLATIONS[self.current_language]['settings_theme_system']
+        ])
         theme_layout.addWidget(theme_label)
         theme_layout.addWidget(self.theme_combo)
         layout.addLayout(theme_layout)
         
         # Размер шрифта
         font_layout = QHBoxLayout()
-        font_label = QLabel("Размер шрифта:")
+        font_label = QLabel(TRANSLATIONS[self.current_language]['settings_font_size'])
         self.font_size = QSpinBox()
         self.font_size.setRange(8, 24)
         self.font_size.setValue(12)
@@ -58,12 +60,12 @@ class SettingsDialog(QDialog):
         layout.addLayout(font_layout)
         
         # Автосохранение
-        self.auto_save = QCheckBox("Автоматическое сохранение")
+        self.auto_save = QCheckBox(TRANSLATIONS[self.current_language]['settings_auto_save'])
         layout.addWidget(self.auto_save)
         
         # Интервал автосохранения
         interval_layout = QHBoxLayout()
-        interval_label = QLabel("Интервал автосохранения (сек):")
+        interval_label = QLabel(TRANSLATIONS[self.current_language]['settings_save_interval'])
         self.save_interval = QSpinBox()
         self.save_interval.setRange(1, 60)
         self.save_interval.setValue(5)
@@ -73,16 +75,24 @@ class SettingsDialog(QDialog):
         
         # Кнопки
         button_layout = QHBoxLayout()
-        save_button = QPushButton("Сохранить")
+        save_button = QPushButton(TRANSLATIONS[self.current_language]['settings_save'])
         save_button.clicked.connect(self.save_settings)
-        cancel_button = QPushButton("Отмена")
+        cancel_button = QPushButton(TRANSLATIONS[self.current_language]['settings_cancel'])
         cancel_button.clicked.connect(self.reject)
         button_layout.addWidget(save_button)
         button_layout.addWidget(cancel_button)
         layout.addLayout(button_layout)
         
+        # Устанавливаем заголовок окна
+        self.setWindowTitle(TRANSLATIONS[self.current_language]['settings_title'])
+        
     def browse_db_path(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Выберите файл базы данных", "", "Базы данных (*.db);;Все файлы (*)")
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, 
+            TRANSLATIONS[self.current_language]['settings_db_path'],
+            "", 
+            "Базы данных (*.db);;Все файлы (*)"
+        )
         if file_path:
             self.db_path_edit.setText(file_path)
         
@@ -99,7 +109,8 @@ class SettingsDialog(QDialog):
         self.db_path_edit.setText(settings.get('db_path', 'notes.db'))
         
         # Загружаем тему
-        theme_index = self.theme_combo.findText(settings.get('theme', 'Системная'))
+        theme = settings.get('theme', 'Системная')
+        theme_index = self.theme_combo.findText(theme)
         if theme_index >= 0:
             self.theme_combo.setCurrentIndex(theme_index)
             
