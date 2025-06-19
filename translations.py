@@ -45,7 +45,9 @@ TRANSLATIONS = {
             <h2>SkimNote</h2>
             <p>Версия 1.0</p>
             <p>Менеджер заметок с древовидной структурой</p>
-            <p>© 2024 Все права защищены</p>
+            <p>Сайт:</p>
+            <p><a href='https://progtips.ru/skimnote'>https://progtips.ru/skimnote</a></p>
+            <p>© 2025 Все права защищены</p>
         ''',
         'search_title': 'Поиск',
         'search_find': 'Найти',
@@ -149,7 +151,9 @@ TRANSLATIONS = {
             <h2>SkimNote</h2>
             <p>Version 1.0</p>
             <p>Note manager with tree structure</p>
-            <p>© 2024 All rights reserved</p>
+            <p>Website:</p>
+            <p><a href='https://progtips.ru/skimnote'>https://progtips.ru/skimnote</a></p>
+            <p>© 2025 All rights reserved</p>
         ''',
         'search_title': 'Search',
         'search_find': 'Find',

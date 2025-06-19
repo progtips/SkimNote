@@ -21,8 +21,8 @@ from translations import TRANSLATIONS
 
 # Определяем пути к файлам
 if getattr(sys, 'frozen', False):
-    # Если приложение запущено как exe
-    BASE_DIR = os.path.dirname(sys.executable)
+    # Если приложение запущено как exe (PyInstaller onefile)
+    BASE_DIR = sys._MEIPASS
 else:
     # Если приложение запущено из исходников
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -627,13 +627,9 @@ class NotesApp(QMainWindow):
 
     def show_about(self):
         """Показать информацию о программе"""
-        about_text = (
-            "SkimNote - программа для создания заметок<br><br>"
-            "Версия 1.0<br><br>"
-            "Сайт:<br>"
-            "<a href='https://progtips.ru/skimnote'>https://progtips.ru/skimnote</a><br><br>"
-            "© 2025 Все права защищены"
-        )
+        # Используем переводы в зависимости от текущего языка
+        about_text = TRANSLATIONS[self.current_language]['about_text']
+        
         msg = QMessageBox(self)
         msg.setWindowTitle(TRANSLATIONS[self.current_language]['about_title'])
         msg.setText(about_text)
