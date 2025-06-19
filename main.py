@@ -10,6 +10,7 @@ from PyQt6.QtGui import QAction, QIcon, QKeySequence, QFontDatabase, QFont
 from database import NotesDB
 from config import Config
 from settings_dialog import SettingsDialog
+from toolbar_manager import ToolbarManager
 import os
 import sqlite3
 import configparser
@@ -33,32 +34,42 @@ SETTINGS_FILE = os.path.join(BASE_DIR, 'settings.ini')
 class SearchDialog(QDialog):
     def __init__(self, parent=None, replace_mode=False, title=None):
         super().__init__(parent)
-        self.setWindowTitle(title if title else ("Найти и заменить" if replace_mode else "Найти"))
+        
+        # Получаем текущий язык из родительского окна
+        current_language = parent.current_language if parent else 'Русский'
+        
+        if title:
+            self.setWindowTitle(title)
+        elif replace_mode:
+            self.setWindowTitle(TRANSLATIONS[current_language]['search_replace'])
+        else:
+            self.setWindowTitle(TRANSLATIONS[current_language]['search_title'])
+            
         self.setModal(True)
         
         layout = QFormLayout(self)
         
         # Поле поиска
         self.search_edit = QLineEdit()
-        layout.addRow("Найти:", self.search_edit)
+        layout.addRow(TRANSLATIONS[current_language]['search_text'], self.search_edit)
         
         # Поле замены (только в режиме замены)
         if replace_mode:
             self.replace_edit = QLineEdit()
-            layout.addRow("Заменить на:", self.replace_edit)
+            layout.addRow(TRANSLATIONS[current_language]['search_replace_with'], self.replace_edit)
         
         # Кнопки
         buttons_layout = QHBoxLayout()
-        self.find_button = QPushButton("Найти")
+        self.find_button = QPushButton(TRANSLATIONS[current_language]['search_find'])
         self.find_button.clicked.connect(self.accept)
         buttons_layout.addWidget(self.find_button)
         
         if replace_mode:
-            self.replace_button = QPushButton("Заменить")
+            self.replace_button = QPushButton(TRANSLATIONS[current_language]['search_replace'])
             self.replace_button.clicked.connect(self.accept)
             buttons_layout.addWidget(self.replace_button)
         
-        self.cancel_button = QPushButton("Отмена")
+        self.cancel_button = QPushButton(TRANSLATIONS[current_language]['settings_cancel'])
         self.cancel_button.clicked.connect(self.reject)
         buttons_layout.addWidget(self.cancel_button)
         
@@ -145,6 +156,9 @@ class NotesApp(QMainWindow):
         self.last_search_text = ""
         self.last_replace_text = ""
         self.restored_geometry = False
+        
+        # Инициализация менеджера панели инструментов
+        self.toolbar_manager = None
 
     def init_db(self, db_path='notes.db'):
         """Инициализация базы данных"""
@@ -262,34 +276,34 @@ class NotesApp(QMainWindow):
         file_menu = menubar.addMenu(TRANSLATIONS[self.current_language]['menu_file'])
         
         # --- Новый пункт ---
-        change_db_action = QAction("Сменить базу данных", self)
+        change_db_action = QAction(TRANSLATIONS[self.current_language]['action_change_db'], self)
         change_db_action.triggered.connect(self.change_db)
         file_menu.addAction(change_db_action)
         # --- Конец нового пункта ---
         
         # --- Новый пункт для восстановления базы данных ---
-        restore_db_action = QAction("Восстановление базы данных", self)
+        restore_db_action = QAction(TRANSLATIONS[self.current_language]['action_restore_db'], self)
         restore_db_action.triggered.connect(self.restore_db)
         file_menu.addAction(restore_db_action)
         # --- Конец нового пункта ---
         
         file_menu.addSeparator()
         
-        exit_action = QAction("Выход", self)
+        exit_action = QAction(TRANSLATIONS[self.current_language]['action_exit'], self)
         exit_action.setShortcut("Alt+F4")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
         # Меню "Заметки"
-        notes_menu = menubar.addMenu("Заметки")
+        notes_menu = menubar.addMenu(TRANSLATIONS[self.current_language]['menu_notes'])
         
         # Переносим сюда пункты создания заметок
-        new_note_action = QAction("Новая заметка", self)
+        new_note_action = QAction(TRANSLATIONS[self.current_language]['action_new'], self)
         new_note_action.setShortcut("Insert")
         new_note_action.triggered.connect(self.new_note)
         notes_menu.addAction(new_note_action)
         
-        new_subnote_action = QAction("Новая вложенная заметка", self)
+        new_subnote_action = QAction(TRANSLATIONS[self.current_language]['action_new_subnote'], self)
         new_subnote_action.setShortcut("Alt+Insert")
         new_subnote_action.triggered.connect(self.new_subnote)
         notes_menu.addAction(new_subnote_action)
@@ -297,78 +311,80 @@ class NotesApp(QMainWindow):
         notes_menu.addSeparator()
 
         # --- Новый пункт: Переместить вверх ---
-        move_up_action = QAction("Переместить вверх", self)
+        move_up_action = QAction(TRANSLATIONS[self.current_language]['action_move_up'], self)
         move_up_action.setShortcut("Ctrl+Up")
         move_up_action.triggered.connect(self.move_note_up)
         notes_menu.addAction(move_up_action)
 
         # --- Новый пункт: Переместить вниз ---
-        move_down_action = QAction("Переместить вниз", self)
+        move_down_action = QAction(TRANSLATIONS[self.current_language]['action_move_down'], self)
         move_down_action.setShortcut("Ctrl+Down")
         move_down_action.triggered.connect(self.move_note_down)
         notes_menu.addAction(move_down_action)
 
         notes_menu.addSeparator()
 
-        find_action = QAction("Найти", self)
+        find_action = QAction(TRANSLATIONS[self.current_language]['action_find'], self)
         find_action.setShortcut("Ctrl+F")
         find_action.triggered.connect(self.show_search_dialog)
         notes_menu.addAction(find_action)
         
-        find_next_action = QAction("Найти далее", self)
+        find_next_action = QAction(TRANSLATIONS[self.current_language]['action_find_next'], self)
         find_next_action.setShortcut("F3")
         find_next_action.triggered.connect(self.handle_f3)
         notes_menu.addAction(find_next_action)
         
-        replace_action = QAction("Найти и заменить", self)
+        replace_action = QAction(TRANSLATIONS[self.current_language]['action_replace'], self)
         replace_action.setShortcut("Alt+F3")
         replace_action.triggered.connect(self.show_replace_dialog)
         notes_menu.addAction(replace_action)
         
-        replace_all_action = QAction("Заменить все", self)
+        replace_all_action = QAction(TRANSLATIONS[self.current_language]['action_replace_all'], self)
         replace_all_action.triggered.connect(self.show_replace_all_dialog)
         notes_menu.addAction(replace_all_action)
         
         notes_menu.addSeparator()
         
-        delete_action = QAction("Удалить заметку", self)
+        delete_action = QAction(TRANSLATIONS[self.current_language]['action_delete'], self)
         delete_action.setShortcut("Delete")
         delete_action.triggered.connect(self.delete_note)
         notes_menu.addAction(delete_action)
         
         # Меню "Настройки"
-        settings_menu = menubar.addMenu("Настройки")
+        settings_menu = menubar.addMenu(TRANSLATIONS[self.current_language]['menu_settings'])
         
-        settings_action = QAction("Настройки", self)
+        settings_action = QAction(TRANSLATIONS[self.current_language]['action_settings'], self)
         settings_action.triggered.connect(self.show_settings)
         settings_menu.addAction(settings_action)
         
         # Меню "Справка"
-        help_menu = menubar.addMenu("Справка")
-        about_action = QAction("О программе", self)
+        help_menu = menubar.addMenu(TRANSLATIONS[self.current_language]['menu_help'])
+        about_action = QAction(TRANSLATIONS[self.current_language]['action_about'], self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
 
     def create_toolbar(self):
-        """Создание панели инструментов"""
-        self.toolbar = QToolBar()
-        self.toolbar.setIconSize(QSize(24, 24))  # Устанавливаем размер иконок 24x24
-        self.addToolBar(self.toolbar)
+        """Создание панели инструментов через менеджер"""
+        # Создаем менеджер панели инструментов
+        self.toolbar_manager = ToolbarManager(self, ICONS_DIR, self.current_language)
         
-        # Добавляем только первые три действия
-        self.toolbar.addAction(self.new_action)
-        self.toolbar.addAction(self.new_subnote_action)
-        self.toolbar.addAction(self.delete_action)
+        # Создаем панель инструментов
+        self.toolbar = self.toolbar_manager.create_toolbar()
         
-        # Удаляем все остальные действия
-        # self.toolbar.addSeparator()
-        # self.toolbar.addAction(self.cut_action)
-        # self.toolbar.addAction(self.copy_action)
-        # self.toolbar.addAction(self.paste_action)
-        # self.toolbar.addSeparator()
-        # self.toolbar.addAction(self.find_action)
-        # self.toolbar.addAction(self.replace_action)
-        # self.toolbar.addAction(self.replace_all_action)
+        # Подключаем обработчики к действиям
+        handlers = {
+            'new_note': self.new_note,
+            'new_subnote': self.new_subnote,
+            'delete': self.delete_note,
+            'cut': lambda: self.editor.cut(),
+            'copy': lambda: self.editor.copy(),
+            'paste': lambda: self.editor.paste(),
+            'find': self.show_search_dialog,
+            'replace': self.show_replace_dialog,
+            'replace_all': self.show_replace_all_dialog
+        }
+        
+        self.toolbar_manager.connect_actions(handlers)
 
     def setup_ui(self):
         """Настройка интерфейса"""
@@ -408,7 +424,7 @@ class NotesApp(QMainWindow):
         # Создаем меню
         self.create_menu()
         
-        # Создаем панель инструментов
+        # Создаем панель инструментов через менеджер
         self.create_toolbar()
         
         # Загружаем заметки
@@ -643,7 +659,7 @@ class NotesApp(QMainWindow):
             self.apply_theme()
             
             # Проверяем, изменился ли язык
-            new_language = dialog.language_combo.currentText()
+            new_language = dialog.lang_combo.currentText()
             if new_language != self.current_language:
                 self.current_language = new_language
                 # Сохраняем настройки
@@ -662,22 +678,30 @@ class NotesApp(QMainWindow):
             
             # Сохраняем текущее состояние
             current_note_id = self.current_note_id
+            current_content = self.editor.toPlainText() if hasattr(self, 'editor') else ""
             
-            # Очищаем текущий интерфейс
-            if hasattr(self, 'central_widget'):
-                self.central_widget.deleteLater()
+            # Сохраняем текущую заметку перед перезагрузкой
+            if self.current_note_id and self.content_modified:
+                self.save_current_note()
             
-            # Создаем новый центральный виджет
-            self.central_widget = QWidget()
-            self.setCentralWidget(self.central_widget)
+            # Очищаем только дерево заметок, но не редактор
+            self.tree.clear()
             
-            # Пересоздаем интерфейс
-            self.init_ui()
+            # Удаляем старую панель инструментов через менеджер
+            if hasattr(self, 'toolbar_manager') and self.toolbar_manager:
+                self.toolbar_manager.remove_toolbar()
+            
+            # Пересоздаем действия с новым языком
             self.create_actions()
-            self.setup_ui()
             
-            # Восстанавливаем размеры и позицию
-            self.setGeometry(geometry)
+            # Пересоздаем меню и панель инструментов
+            self.menuBar().clear()
+            self.create_menu()
+            self.create_toolbar()
+            
+            # Обновляем язык в менеджере панели инструментов
+            if hasattr(self, 'toolbar_manager') and self.toolbar_manager:
+                self.toolbar_manager.update_language(self.current_language)
             
             # Обновляем заголовок окна
             self.setWindowTitle(TRANSLATIONS[self.current_language]['window_title'])
@@ -685,12 +709,15 @@ class NotesApp(QMainWindow):
             # Применяем тему
             self.apply_theme()
             
+            # Загружаем заметки заново
+            self.load_notes()
+            
             # Восстанавливаем выбранную заметку
             if current_note_id:
                 self.select_note_by_id(current_note_id)
-            
-            # Показываем окно
-            self.show()
+                # Восстанавливаем содержимое редактора, если оно было изменено
+                if current_content and not self.content_modified:
+                    self.editor.setPlainText(current_content)
             
         except Exception as e:
             QMessageBox.critical(self, TRANSLATIONS[self.current_language]['error_title'],
@@ -719,10 +746,16 @@ class NotesApp(QMainWindow):
     def collect_search_results(self, text):
         """Собирает все вхождения текста по всем заметкам"""
         self.search_results = []  # (note_id, start, end)
-        for note_id, note in self.notes_dict.items():
-            if note_id == 1:
+        
+        # Получаем все заметки из базы данных
+        notes = self.db.get_all_notes()
+        
+        for note in notes:
+            note_id, title, content, parent_id, order_index = note
+            if note_id == 1:  # Пропускаем корневую заметку
                 continue
-            content = note[2]  # content
+            if content is None:
+                content = ""
             idx = 0
             while True:
                 idx = content.find(text, idx)
@@ -811,7 +844,7 @@ class NotesApp(QMainWindow):
 
     def show_replace_all_dialog(self):
         """Показать диалог замены всех вхождений"""
-        dialog = SearchDialog(self, replace_mode=True, title="Заменить все")
+        dialog = SearchDialog(self, replace_mode=True, title=TRANSLATIONS[self.current_language]['action_replace_all'])
         if dialog.exec() == QDialog.DialogCode.Accepted:
             search_text = dialog.search_edit.text()
             replace_text = dialog.replace_edit.text()
@@ -844,7 +877,7 @@ class NotesApp(QMainWindow):
         self.move(x, y)
 
     def change_db(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "Выберите файл базы данных", "", "SQLite Database (*.db);;All Files (*.*)")
+        file_name, _ = QFileDialog.getOpenFileName(self, TRANSLATIONS[self.current_language]['action_change_db'], "", "SQLite Database (*.db);;All Files (*.*)")
         if file_name:
             self.save_settings_dialog_db_path(file_name)
 
@@ -929,8 +962,8 @@ class NotesApp(QMainWindow):
         layout.addWidget(list_widget)
         
         buttons = QHBoxLayout()
-        ok_button = QPushButton("Восстановить")
-        cancel_button = QPushButton("Отмена")
+        ok_button = QPushButton(TRANSLATIONS[self.current_language]['restore'])
+        cancel_button = QPushButton(TRANSLATIONS[self.current_language]['settings_cancel'])
         buttons.addWidget(ok_button)
         buttons.addWidget(cancel_button)
         layout.addLayout(buttons)
@@ -954,7 +987,6 @@ class NotesApp(QMainWindow):
             config = configparser.ConfigParser()
             config.read(self.SETTINGS_FILE, encoding='utf-8')
             main_db_path = config.get('main', 'db_path', fallback=self.db.db_path)
-            QMessageBox.information(self, "Отладка", f"Путь к базе данных: {main_db_path}")
             
             # Закрываем текущее соединение с базой данных
             self.db.close()
