@@ -18,18 +18,24 @@ import shutil
 from datetime import datetime, timedelta
 import socket
 from translations import TRANSLATIONS
+from backup_manager import BackupManager, init_backup_manager, register_exit_handler
 
 # Определяем пути к файлам
 if getattr(sys, 'frozen', False):
     # Если приложение запущено как exe (PyInstaller onefile)
-    BASE_DIR = sys._MEIPASS
+    BASE_DIR = os.path.dirname(sys.executable)
+    ICONS_DIR = os.path.join(sys._MEIPASS, 'icons')  # Иконки в временной папке PyInstaller
 else:
     # Если приложение запущено из исходников
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    ICONS_DIR = os.path.join(BASE_DIR, 'icons')
 
 # Константы
-ICONS_DIR = os.path.join(BASE_DIR, 'icons')
 SETTINGS_FILE = os.path.join(BASE_DIR, 'settings.ini')
+
+# Инициализируем менеджер бэкапов и регистрируем обработчик завершения
+init_backup_manager(BASE_DIR)
+register_exit_handler()
 
 class SearchDialog(QDialog):
     def __init__(self, parent=None, replace_mode=False, title=None):
@@ -115,8 +121,8 @@ class NotesApp(QMainWindow):
                 self.font_family = config_parser.get('Font', 'family', fallback='Segoe UI')
                 db_path = config_parser.get('Database', 'path', fallback='notes.db')
                 
-                # Инициализируем базу данных
-                self.init_db(db_path)
+                # Сохраняем путь к базе данных для последующей инициализации
+                self.db_path = db_path
             except Exception as e:
                 QMessageBox.critical(self, TRANSLATIONS[self.current_language]['error_title'], 
                     TRANSLATIONS[self.current_language]['error_settings_load'] + f"\n{str(e)}")
@@ -129,6 +135,14 @@ class NotesApp(QMainWindow):
         self.create_actions()
         self.setup_ui()
         
+        # Инициализируем базу данных после создания интерфейса
+        if not hasattr(self, 'db') or self.db is None:
+            db_path = getattr(self, 'db_path', 'notes.db')
+            self.init_db(db_path)
+        
+        # Загружаем заметки
+        self.load_notes()
+        
         # Устанавливаем заголовок окна
         self.setWindowTitle(TRANSLATIONS[self.current_language]['window_title'])
         self.setWindowIcon(QIcon(os.path.join(ICONS_DIR, 'app.ico')))
@@ -138,6 +152,9 @@ class NotesApp(QMainWindow):
         
         # Показываем окно
         self.show()
+        
+        # Принудительно показываем панель инструментов после отображения окна
+        QTimer.singleShot(100, self.show_toolbar)
 
     def init_ui(self):
         """Инициализация основных переменных и настроек интерфейса"""
@@ -386,6 +403,11 @@ class NotesApp(QMainWindow):
         
         self.toolbar_manager.connect_actions(handlers)
 
+    def show_toolbar(self):
+        """Принудительное отображение панели инструментов"""
+        if hasattr(self, 'toolbar') and self.toolbar:
+            self.toolbar.setVisible(True)
+
     def setup_ui(self):
         """Настройка интерфейса"""
         # Создаем главный виджет и layout
@@ -426,9 +448,6 @@ class NotesApp(QMainWindow):
         
         # Создаем панель инструментов через менеджер
         self.create_toolbar()
-        
-        # Загружаем заметки
-        self.load_notes()
 
     def load_notes(self):
         """Загрузка заметок из базы данных"""
@@ -892,60 +911,18 @@ class NotesApp(QMainWindow):
 
     def backup_db(self):
         """Регулярный бэкап базы данных"""
-        # Изменяем путь к папке backup, чтобы она всегда создавалась в папке с файлом exe
-        if getattr(sys, 'frozen', False):
-            backup_dir = os.path.join(os.path.dirname(sys.executable), "backup")
-        else:
-            backup_dir = os.path.join(os.path.dirname(sys.executable), "backup")
-        if not os.path.exists(backup_dir):
-            os.makedirs(backup_dir)
-        db_path = self.db.db_path
-        db_name = os.path.basename(db_path)
-        today_str = datetime.now().strftime("%Y%m%d")
-        # Проверяем, есть ли уже бэкап за сегодня
-        for filename in os.listdir(backup_dir):
-            if filename.startswith(db_name) and filename.endswith(".db") and today_str in filename:
-                # Уже есть бэкап за сегодня
-                break
-        else:
-            # Нет бэкапа за сегодня — создаём
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_filename = f"{db_name}_{timestamp}.db"
-            backup_path = os.path.join(backup_dir, backup_filename)
-            if not os.path.exists(backup_path):
-                shutil.copy2(db_path, backup_path)
-        # Удаляем бэкапы старше 10 дней
-        for filename in os.listdir(backup_dir):
-            if filename.startswith(db_name) and filename.endswith(".db"):
-                file_path = os.path.join(backup_dir, filename)
-                file_time = datetime.fromtimestamp(os.path.getmtime(file_path))
-                if datetime.now() - file_time > timedelta(days=10):
-                    os.remove(file_path)
-    
+        backup_manager = BackupManager(BASE_DIR)
+        backup_manager.create_backup(self.db.db_path)
+
     def restore_db(self):
         """Восстановление базы данных из бэкапа"""
-        # Изменяем путь к папке backup, чтобы она всегда создавалась в папке с файлом exe
-        if getattr(sys, 'frozen', False):
-            # Если программа собрана в exe, используем папку, откуда запущен exe
-            backup_dir = os.path.join(os.path.dirname(sys.executable), "backup")
-        else:
-            # Если программа запущена из исходников, используем папку, откуда запущен exe
-            backup_dir = os.path.join(os.path.dirname(sys.executable), "backup")
+        backup_manager = BackupManager(BASE_DIR)
+        backup_files = backup_manager.get_backup_list()
         
-        if not os.path.exists(backup_dir):
-            QMessageBox.warning(self, TRANSLATIONS[self.current_language]['restore_title'],
-                              TRANSLATIONS[self.current_language]['backup_dir_not_found'])
-            return
-        
-        # Получаем список файлов бэкапов
-        backup_files = [f for f in os.listdir(backup_dir) if f.endswith(".db")]
         if not backup_files:
             QMessageBox.warning(self, TRANSLATIONS[self.current_language]['restore_title'],
                               TRANSLATIONS[self.current_language]['no_backups_found'])
             return
-        
-        # Сортируем файлы по дате создания (от новых к старым)
-        backup_files.sort(key=lambda x: os.path.getmtime(os.path.join(backup_dir, x)), reverse=True)
         
         # Создаем диалог выбора файла
         dialog = QDialog(self)
@@ -953,8 +930,9 @@ class NotesApp(QMainWindow):
         layout = QVBoxLayout(dialog)
         
         list_widget = QListWidget()
-        for file in backup_files:
-            list_widget.addItem(file)
+        for file_path in backup_files:
+            filename = os.path.basename(file_path)
+            list_widget.addItem(filename)
         layout.addWidget(list_widget)
         
         buttons = QHBoxLayout()
@@ -968,44 +946,47 @@ class NotesApp(QMainWindow):
         cancel_button.clicked.connect(dialog.reject)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            selected_file = list_widget.currentItem().text()
-            backup_path = os.path.join(backup_dir, selected_file)
-            
-            # Выдаем предупреждение перед восстановлением
-            reply = QMessageBox.question(self, TRANSLATIONS[self.current_language]['restore_title'],
-                                       TRANSLATIONS[self.current_language]['confirm_restore'],
-                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            if reply == QMessageBox.StandardButton.No:
-                return
-            
-            # Получаем путь к основной базе данных из настроек
-            import configparser
-            config = configparser.ConfigParser()
-            config.read(self.SETTINGS_FILE, encoding='utf-8')
-            main_db_path = config.get('main', 'db_path', fallback=self.db.db_path)
-            
-            # Закрываем текущее соединение с базой данных
-            self.db.close()
-            
-            # Копируем выбранный бэкап на место основной базы данных
-            shutil.copy2(backup_path, main_db_path)
-            
-            # Пересоздаем соединение с базой данных
-            self.db = NotesDB(main_db_path)
-            
-            # Сброс состояния и очистка интерфейса
-            self.current_note_id = None
-            self.current_parent_id = 1
-            self.content_modified = False
-            self.editing_title = False
-            self.last_search_text = ""
-            self.last_replace_text = ""
-            self.editor.clear()
-            self.tree.clear()
-            self.load_notes()
-            
-            QMessageBox.information(self, TRANSLATIONS[self.current_language]['restore_title'],
-                                  TRANSLATIONS[self.current_language]['restore_success'])
+            selected_index = list_widget.currentRow()
+            if selected_index >= 0:
+                selected_backup_path = backup_files[selected_index]
+                
+                # Выдаем предупреждение перед восстановлением
+                reply = QMessageBox.question(self, TRANSLATIONS[self.current_language]['restore_title'],
+                                           TRANSLATIONS[self.current_language]['confirm_restore'],
+                                           QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if reply == QMessageBox.StandardButton.No:
+                    return
+                
+                # Получаем путь к основной базе данных из настроек
+                import configparser
+                config = configparser.ConfigParser()
+                config.read(self.SETTINGS_FILE, encoding='utf-8')
+                main_db_path = config.get('main', 'db_path', fallback=self.db.db_path)
+                
+                # Закрываем текущее соединение с базой данных
+                self.db.close()
+                
+                # Восстанавливаем базу данных
+                if backup_manager.restore_backup(selected_backup_path, main_db_path):
+                    # Пересоздаем соединение с базой данных
+                    self.db = NotesDB(main_db_path)
+                    
+                    # Сброс состояния и очистка интерфейса
+                    self.current_note_id = None
+                    self.current_parent_id = 1
+                    self.content_modified = False
+                    self.editing_title = False
+                    self.last_search_text = ""
+                    self.last_replace_text = ""
+                    self.editor.clear()
+                    self.tree.clear()
+                    self.load_notes()
+                    
+                    QMessageBox.information(self, TRANSLATIONS[self.current_language]['restore_title'],
+                                          TRANSLATIONS[self.current_language]['restore_success'])
+                else:
+                    QMessageBox.critical(self, TRANSLATIONS[self.current_language]['restore_title'],
+                                       "Ошибка при восстановлении базы данных")
 
     def keyPressEvent(self, event):
         """Обработка нажатия клавиш"""
@@ -1121,6 +1102,18 @@ class NotesApp(QMainWindow):
                 config.add_section('Interface')
             config['Interface']['language'] = self.current_language
             
+            # Сохраняем путь к базе данных
+            if not config.has_section('Database'):
+                config.add_section('Database')
+            if hasattr(self, 'db') and self.db:
+                config['Database']['path'] = self.db.db_path
+            
+            # Сохраняем настройки шрифта
+            if not config.has_section('Font'):
+                config.add_section('Font')
+            config['Font']['size'] = str(self.font_size)
+            config['Font']['family'] = self.font_family
+            
             # Сохраняем настройки в файл
             with open(self.SETTINGS_FILE, 'w', encoding='utf-8') as f:
                 config.write(f)
@@ -1136,7 +1129,6 @@ class NotesApp(QMainWindow):
         self.center_on_screen()
         self.font_size = 12
         self.font_family = 'Segoe UI'
-        self.init_db('notes.db')
         
         # Создаем файл настроек со значениями по умолчанию
         self.save_window_settings()
