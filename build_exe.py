@@ -51,7 +51,14 @@ def build_executable():
     ]
     
     try:
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        # Используем encoding='utf-8' для правильной обработки кодировки
+        result = subprocess.run(
+            cmd, 
+            check=True, 
+            capture_output=True, 
+            encoding='utf-8',
+            errors='replace'  # Заменяем проблемные символы
+        )
         print("Сборка завершена успешно!")
         print(result.stdout)
         return True
@@ -70,7 +77,12 @@ def main():
         print(f"PyInstaller найден: {PyInstaller.__version__}")
     except ImportError:
         print("PyInstaller не найден. Устанавливаем...")
-        subprocess.run([sys.executable, '-m', 'pip', 'install', 'pyinstaller'], check=True)
+        subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', 'pyinstaller'], 
+            check=True,
+            encoding='utf-8',
+            errors='replace'
+        )
     
     # Очищаем предыдущие сборки
     clean_build_dirs()

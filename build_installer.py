@@ -22,7 +22,12 @@ def check_requirements():
         print(f"✓ PyInstaller найден: {PyInstaller.__version__}")
     except ImportError:
         print("✗ PyInstaller не найден. Устанавливаем...")
-        subprocess.run([sys.executable, '-m', 'pip', 'install', 'pyinstaller'], check=True)
+        subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', 'pyinstaller'], 
+            check=True,
+            encoding='utf-8',
+            errors='replace'
+        )
         print("✓ PyInstaller установлен")
     
     # Проверяем Inno Setup
@@ -55,7 +60,14 @@ def build_executable():
     
     # Запускаем скрипт сборки
     try:
-        result = subprocess.run([sys.executable, 'build_exe.py'], check=True, capture_output=True, text=True)
+        # Используем encoding='utf-8' для правильной обработки кодировки
+        result = subprocess.run(
+            [sys.executable, 'build_exe.py'], 
+            check=True, 
+            capture_output=True, 
+            encoding='utf-8',
+            errors='replace'  # Заменяем проблемные символы
+        )
         print(result.stdout)
         return True
     except subprocess.CalledProcessError as e:
@@ -94,10 +106,29 @@ def create_installer():
         print("✗ Компилятор Inno Setup не найден!")
         return False
     
+    # Проверяем, не занят ли файл
+    installer_output = Path('installer/SkimNote_Setup.exe')
+    if installer_output.exists():
+        try:
+            # Пытаемся удалить существующий файл
+            installer_output.unlink()
+            print("Удален существующий установщик")
+        except PermissionError:
+            print("⚠ Предупреждение: Не удалось удалить существующий установщик. Возможно, он открыт в другой программе.")
+            print("Пожалуйста, закройте все программы, которые могут использовать этот файл, и попробуйте снова.")
+            return False
+    
     # Компилируем установщик
     try:
         cmd = [inno_compiler, 'installer.iss']
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        # Используем encoding='utf-8' для правильной обработки кодировки
+        result = subprocess.run(
+            cmd, 
+            check=True, 
+            capture_output=True, 
+            encoding='utf-8',
+            errors='replace'  # Заменяем проблемные символы
+        )
         print("✓ Установщик создан успешно!")
         print(result.stdout)
         return True
@@ -127,6 +158,30 @@ def main():
     print("=== Автоматическая сборка установщика SkimNote ===")
     print("Этот скрипт создаст полный установщик для вашей программы.")
     print()
+    
+    # Проверяем доступность файлов
+    print("=== Проверка доступности файлов ===")
+    try:
+        result = subprocess.run(
+            [sys.executable, 'check_files.py'], 
+            check=True, 
+            capture_output=True, 
+            encoding='utf-8',
+            errors='replace'
+        )
+        print(result.stdout)
+    except subprocess.CalledProcessError as e:
+        print("⚠ Проблемы с доступностью файлов:")
+        print(e.stderr)
+        print("\nПопробуйте:")
+        print("1. Закрыть все программы, использующие файлы проекта")
+        print("2. Перезапустить IDE")
+        print("3. Запустить сборку снова")
+        print("\nПродолжить сборку? (y/n): ", end="")
+        response = input().lower().strip()
+        if response != 'y':
+            print("Сборка отменена.")
+            sys.exit(0)
     
     # Проверяем требования
     if not check_requirements():

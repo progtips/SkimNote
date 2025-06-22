@@ -43,7 +43,7 @@ TRANSLATIONS = {
         'about_title': 'О программе',
         'about_text': '''
             <h2>SkimNote</h2>
-            <p>Версия 1.0</p>
+            <p>Версия 1.01</p>
             <p>Менеджер заметок с древовидной структурой</p>
             <p>Сайт:</p>
             <p><a href='https://progtips.ru/skimnote'>https://progtips.ru/skimnote</a></p>
@@ -149,7 +149,7 @@ TRANSLATIONS = {
         'about_title': 'About',
         'about_text': '''
             <h2>SkimNote</h2>
-            <p>Version 1.0</p>
+            <p>Version 1.01</p>
             <p>Note manager with tree structure</p>
             <p>Website:</p>
             <p><a href='https://progtips.ru/skimnote'>https://progtips.ru/skimnote</a></p>
