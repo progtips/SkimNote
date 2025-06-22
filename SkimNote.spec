@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('icons', 'icons'), ('translations.py', '.'), ('config.py', '.'), ('database.py', '.'), ('settings_dialog.py', '.'), ('toolbar_manager.py', '.')],
+    datas=[('icons', 'icons'), ('translations.py', '.'), ('config.py', '.'), ('database_manager.py', '.'), ('settings_dialog.py', '.'), ('toolbar_manager.py', '.')],
     hiddenimports=['PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets', 'sqlite3', 'configparser', 'datetime', 'shutil', 'socket'],
     hookspath=[],
     hooksconfig={},

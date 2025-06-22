@@ -51,7 +51,7 @@ python main.py
 ## Структура проекта
 
 - `main.py` - основной файл приложения
-- `database.py` - модуль работы с базой данных
+- `database_manager.py` - модуль работы с базой данных
 - `requirements.txt` - список зависимостей
 - `notes.db` - файл базы данных SQLite
 

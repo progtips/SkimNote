@@ -7,12 +7,11 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QListWidget)
 from PyQt6.QtCore import Qt, QSize, QSettings, QTimer
 from PyQt6.QtGui import QAction, QIcon, QKeySequence, QFontDatabase, QFont
-from database import NotesDB
+from database_manager import DatabaseManager
 from config import Config
 from settings_dialog import SettingsDialog
 from toolbar_manager import ToolbarManager
 import os
-import sqlite3
 import configparser
 import shutil
 from datetime import datetime, timedelta
@@ -32,6 +31,7 @@ else:
 
 # Константы
 SETTINGS_FILE = os.path.join(BASE_DIR, 'settings.ini')
+DEFAULT_DB_PATH = os.path.join(BASE_DIR, 'notes.db')
 
 # Инициализируем менеджер бэкапов и регистрируем обработчик завершения
 init_backup_manager(BASE_DIR)
@@ -119,13 +119,12 @@ class NotesApp(QMainWindow):
                 # Загружаем остальные настройки
                 self.font_size = config_parser.getint('Font', 'size', fallback=12)
                 self.font_family = config_parser.get('Font', 'family', fallback='Segoe UI')
-                db_path = config_parser.get('Database', 'path', fallback='notes.db')
+                db_path = config_parser.get('Database', 'path', fallback=DEFAULT_DB_PATH)
                 
                 # Сохраняем путь к базе данных для последующей инициализации
                 self.db_path = db_path
             except Exception as e:
-                QMessageBox.critical(self, TRANSLATIONS[self.current_language]['error_title'], 
-                    TRANSLATIONS[self.current_language]['error_settings_load'] + f"\n{str(e)}")
+                print(f"DEBUG: Ошибка при загрузке настроек: {str(e)}")
                 self.set_default_settings()
         else:
             self.current_language = config.get('language', 'Русский')
@@ -136,8 +135,8 @@ class NotesApp(QMainWindow):
         self.setup_ui()
         
         # Инициализируем базу данных после создания интерфейса
-        if not hasattr(self, 'db') or self.db is None:
-            db_path = getattr(self, 'db_path', 'notes.db')
+        if not hasattr(self, 'db_manager') or self.db_manager is None:
+            db_path = getattr(self, 'db_path', DEFAULT_DB_PATH)
             self.init_db(db_path)
         
         # Загружаем заметки
@@ -163,7 +162,8 @@ class NotesApp(QMainWindow):
         self.default_height = 600
         self.font_size = 12
         self.font_family = "Segoe UI"
-        self.db = None  # Инициализация будет в load_settings
+        self.db_manager = None  # Инициализация будет в load_settings
+        self.current_language = "Русский"  # Значение по умолчанию
 
         # Инициализация переменных состояния
         self.current_note_id = None
@@ -173,13 +173,20 @@ class NotesApp(QMainWindow):
         self.last_search_text = ""
         self.last_replace_text = ""
         self.restored_geometry = False
+        self.programmatic_load = False  # Флаг для предотвращения срабатывания textChanged
         
         # Инициализация менеджера панели инструментов
         self.toolbar_manager = None
 
     def init_db(self, db_path='notes.db'):
         """Инициализация базы данных"""
-        self.db = NotesDB(db_path)
+        # Убеждаемся, что current_language инициализирован
+        if not hasattr(self, 'current_language') or self.current_language is None:
+            self.current_language = "Русский"
+            
+        self.db_manager = DatabaseManager(BASE_DIR, self.current_language)
+        self.db_manager.init_database(db_path)
+        self.db = self.db_manager.db  # Для обратной совместимости
 
     def load_settings(self):
         """Загрузка настроек из файла"""
@@ -190,16 +197,16 @@ class NotesApp(QMainWindow):
             config.read(self.SETTINGS_FILE, encoding='utf-8')
             self.font_size = int(config.get('main', 'font_size', fallback='12'))
             self.font_family = config.get('main', 'font_family', fallback='Segoe UI')
-            db_path = config.get('main', 'db_path', fallback='notes.db')
+            db_path = config.get('main', 'db_path', fallback=DEFAULT_DB_PATH)
             
             # Инициализируем базу данных с путем из настроек
-            if self.db is None or self.db.db_path != db_path:
+            if self.db_manager is None or self.db_manager.db_path != db_path:
                 self.init_db(db_path)
         else:
             # Используем значения по умолчанию
             self.font_size = 12
             self.font_family = "Segoe UI"
-            self.init_db('notes.db')
+            self.init_db(DEFAULT_DB_PATH)
 
     def create_actions(self):
         """Создание действий меню и панели инструментов"""
@@ -424,7 +431,7 @@ class NotesApp(QMainWindow):
         self.tree.setHeaderHidden(True)  # Скрываем заголовок
         self.tree.itemClicked.connect(self.on_note_selected)
         self.tree.itemDoubleClicked.connect(self.on_note_double_clicked)
-        self.tree.currentItemChanged.connect(self.on_note_selected)
+        self.tree.currentItemChanged.connect(self.on_current_item_changed)
         self.tree.itemChanged.connect(self.on_item_changed)
         left_layout.addWidget(self.tree)
         
@@ -487,7 +494,9 @@ class NotesApp(QMainWindow):
         # Выбираем первую заметку, если она есть
         if self.tree.topLevelItemCount() > 0:
             first_item = self.tree.topLevelItem(0)
+            self.programmatic_load = True  # Устанавливаем флаг перед программным выбором
             self.tree.setCurrentItem(first_item)
+            self.programmatic_load = False  # Сбрасываем флаг после программного выбора
             self.on_note_selected(first_item)
 
     def select_note_by_id(self, note_id):
@@ -495,8 +504,10 @@ class NotesApp(QMainWindow):
         for i in range(self.tree.topLevelItemCount()):
             item = self.tree.topLevelItem(i)
             if item.data(0, Qt.ItemDataRole.UserRole) == note_id:
+                self.programmatic_load = True  # Устанавливаем флаг перед программным выбором
                 self.tree.setCurrentItem(item)
                 self.tree.scrollToItem(item)
+                self.programmatic_load = False  # Сбрасываем флаг после программного выбора
                 break
 
     def new_note(self):
@@ -510,8 +521,7 @@ class NotesApp(QMainWindow):
             self.content_modified = False
             self.start_rename()
         except Exception as e:
-            QMessageBox.critical(self, TRANSLATIONS[self.current_language]['error_title'], 
-                               TRANSLATIONS[self.current_language]['error_create_note'] + f": {str(e)}")
+            print(f"DEBUG: Ошибка при создании заметки: {str(e)}")
 
     def new_subnote(self):
         """Создать новую вложенную заметку"""
@@ -525,8 +535,7 @@ class NotesApp(QMainWindow):
             self.select_note_by_id(note_id)
             self.start_rename()
         except Exception as e:
-            QMessageBox.critical(self, TRANSLATIONS[self.current_language]['error_title'], 
-                               TRANSLATIONS[self.current_language]['error_create_note'] + f": {str(e)}")
+            print(f"DEBUG: Ошибка при создании вложенной заметки: {str(e)}")
 
     def save_current_note(self):
         """Сохранение текущей заметки"""
@@ -569,8 +578,7 @@ class NotesApp(QMainWindow):
                 self.db.delete_note(note_id)
                 self.load_notes()
             except Exception as e:
-                QMessageBox.critical(self, TRANSLATIONS[self.current_language]['error_title'], 
-                                   TRANSLATIONS[self.current_language]['error_delete_note'] + f": {str(e)}")
+                print(f"DEBUG: Ошибка при удалении заметки: {str(e)}")
 
     def on_note_selected(self, item):
         """Обработка выбора заметки"""
@@ -591,7 +599,9 @@ class NotesApp(QMainWindow):
             return
             
         # Отображаем текст заметки
+        self.programmatic_load = True  # Устанавливаем флаг перед загрузкой
         self.editor.setPlainText(note[2])  # content
+        self.programmatic_load = False  # Сбрасываем флаг после загрузки
         
         # Сохраняем ID текущей заметки и родителя
         self.current_note_id = note_id
@@ -624,6 +634,9 @@ class NotesApp(QMainWindow):
 
     def on_text_changed(self):
         """Обработчик изменения текста"""
+        if self.programmatic_load:
+            return
+            
         self.content_modified = True
 
     def closeEvent(self, event):
@@ -633,6 +646,10 @@ class NotesApp(QMainWindow):
         
         # Сохраняем настройки
         self.save_window_settings()
+        
+        # Закрываем соединение с базой данных
+        if hasattr(self, 'db_manager') and self.db_manager:
+            self.db_manager.close_database()
         
         event.accept()
 
@@ -718,6 +735,10 @@ class NotesApp(QMainWindow):
             if hasattr(self, 'toolbar_manager') and self.toolbar_manager:
                 self.toolbar_manager.update_language(self.current_language)
             
+            # Обновляем язык в менеджере базы данных
+            if hasattr(self, 'db_manager') and self.db_manager:
+                self.db_manager.current_language = self.current_language
+            
             # Обновляем заголовок окна
             self.setWindowTitle(TRANSLATIONS[self.current_language]['window_title'])
             
@@ -732,11 +753,12 @@ class NotesApp(QMainWindow):
                 self.select_note_by_id(current_note_id)
                 # Восстанавливаем содержимое редактора, если оно было изменено
                 if current_content and not self.content_modified:
+                    self.programmatic_load = True  # Устанавливаем флаг перед восстановлением
                     self.editor.setPlainText(current_content)
+                    self.programmatic_load = False  # Сбрасываем флаг после восстановления
             
         except Exception as e:
-            QMessageBox.critical(self, TRANSLATIONS[self.current_language]['error_title'],
-                               f"Ошибка при смене языка: {str(e)}")
+            QMessageBox.critical(self, TRANSLATIONS[self.current_language]['error_title'], f"Не удалось перезагрузить интерфейс: {str(e)}")
 
     def handle_f3(self):
         """Обработка нажатия F3"""
@@ -823,8 +845,10 @@ class NotesApp(QMainWindow):
         # заменяем текст
         content = self.editor.toPlainText()
         new_content = content[:start] + replace_text + content[end:]
+        self.programmatic_load = True  # Устанавливаем флаг перед заменой
         self.editor.setPlainText(new_content)
-        self.on_text_changed()
+        self.programmatic_load = False  # Сбрасываем флаг после замены
+        self.on_text_changed()  # Явно вызываем обработчик
         # после замены обновляем результаты поиска
         self.collect_search_results(search_text)
 
@@ -852,8 +876,10 @@ class NotesApp(QMainWindow):
             self.select_note_by_id(note_id)
             content = self.editor.toPlainText()
             new_content = content[:start] + replace_text + content[end:]
+            self.programmatic_load = True  # Устанавливаем флаг перед заменой
             self.editor.setPlainText(new_content)
-            self.on_text_changed()
+            self.programmatic_load = False  # Сбрасываем флаг после замены
+            self.on_text_changed()  # Явно вызываем обработчик
         QMessageBox.information(self, TRANSLATIONS[self.current_language]['replace_title'],
                               TRANSLATIONS[self.current_language]['replace_count'] + str(len(self.search_results)))
 
@@ -892,9 +918,8 @@ class NotesApp(QMainWindow):
         self.move(x, y)
 
     def change_db(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, TRANSLATIONS[self.current_language]['action_change_db'], "", "SQLite Database (*.db);;All Files (*.*)")
-        if file_name:
-            self.save_settings_dialog_db_path(file_name)
+        if self.db_manager.change_database(self):
+            self.load_notes()
 
     def save_settings_dialog_db_path(self, db_path):
         # Сохраняем только путь к базе данных, остальные настройки не трогаем
@@ -905,8 +930,9 @@ class NotesApp(QMainWindow):
         config['main']['db_path'] = db_path
         with open(self.SETTINGS_FILE, 'w', encoding='utf-8') as f:
             config.write(f)
-        self.db.close()
-        self.db = NotesDB(db_path)
+        self.db_manager.close_database()
+        self.db_manager.init_database(db_path)
+        self.db = self.db_manager.db
         self.load_notes()
 
     def backup_db(self):
@@ -917,76 +943,18 @@ class NotesApp(QMainWindow):
     def restore_db(self):
         """Восстановление базы данных из бэкапа"""
         backup_manager = BackupManager(BASE_DIR)
-        backup_files = backup_manager.get_backup_list()
         
-        if not backup_files:
-            QMessageBox.warning(self, TRANSLATIONS[self.current_language]['restore_title'],
-                              TRANSLATIONS[self.current_language]['no_backups_found'])
-            return
-        
-        # Создаем диалог выбора файла
-        dialog = QDialog(self)
-        dialog.setWindowTitle(TRANSLATIONS[self.current_language]['restore_title'])
-        layout = QVBoxLayout(dialog)
-        
-        list_widget = QListWidget()
-        for file_path in backup_files:
-            filename = os.path.basename(file_path)
-            list_widget.addItem(filename)
-        layout.addWidget(list_widget)
-        
-        buttons = QHBoxLayout()
-        ok_button = QPushButton(TRANSLATIONS[self.current_language]['restore'])
-        cancel_button = QPushButton(TRANSLATIONS[self.current_language]['settings_cancel'])
-        buttons.addWidget(ok_button)
-        buttons.addWidget(cancel_button)
-        layout.addLayout(buttons)
-        
-        ok_button.clicked.connect(dialog.accept)
-        cancel_button.clicked.connect(dialog.reject)
-        
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            selected_index = list_widget.currentRow()
-            if selected_index >= 0:
-                selected_backup_path = backup_files[selected_index]
-                
-                # Выдаем предупреждение перед восстановлением
-                reply = QMessageBox.question(self, TRANSLATIONS[self.current_language]['restore_title'],
-                                           TRANSLATIONS[self.current_language]['confirm_restore'],
-                                           QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                if reply == QMessageBox.StandardButton.No:
-                    return
-                
-                # Получаем путь к основной базе данных из настроек
-                import configparser
-                config = configparser.ConfigParser()
-                config.read(self.SETTINGS_FILE, encoding='utf-8')
-                main_db_path = config.get('main', 'db_path', fallback=self.db.db_path)
-                
-                # Закрываем текущее соединение с базой данных
-                self.db.close()
-                
-                # Восстанавливаем базу данных
-                if backup_manager.restore_backup(selected_backup_path, main_db_path):
-                    # Пересоздаем соединение с базой данных
-                    self.db = NotesDB(main_db_path)
-                    
-                    # Сброс состояния и очистка интерфейса
-                    self.current_note_id = None
-                    self.current_parent_id = 1
-                    self.content_modified = False
-                    self.editing_title = False
-                    self.last_search_text = ""
-                    self.last_replace_text = ""
-                    self.editor.clear()
-                    self.tree.clear()
-                    self.load_notes()
-                    
-                    QMessageBox.information(self, TRANSLATIONS[self.current_language]['restore_title'],
-                                          TRANSLATIONS[self.current_language]['restore_success'])
-                else:
-                    QMessageBox.critical(self, TRANSLATIONS[self.current_language]['restore_title'],
-                                       "Ошибка при восстановлении базы данных")
+        if self.db_manager.restore_database(self, backup_manager):
+            # Сброс состояния и очистка интерфейса
+            self.current_note_id = None
+            self.current_parent_id = 1
+            self.content_modified = False
+            self.editing_title = False
+            self.last_search_text = ""
+            self.last_replace_text = ""
+            self.editor.clear()
+            self.tree.clear()
+            self.load_notes()
 
     def keyPressEvent(self, event):
         """Обработка нажатия клавиш"""
@@ -1020,7 +988,7 @@ class NotesApp(QMainWindow):
                 # Сохраняем с новым заголовком
                 self.db.save_note(note_id, new_title, note[2])
         except Exception as e:
-            QMessageBox.critical(self, TRANSLATIONS[self.current_language]['error_title'], f"Не удалось сохранить заголовок: {str(e)}")
+            print(f"DEBUG: Ошибка при сохранении заголовка: {str(e)}")
 
     def move_note_up(self):
         """Переместить заметку вверх среди соседей"""
@@ -1133,6 +1101,14 @@ class NotesApp(QMainWindow):
         # Создаем файл настроек со значениями по умолчанию
         self.save_window_settings()
 
+    def on_current_item_changed(self, current, previous):
+        """Обработка изменения текущего элемента дерева"""
+        # Этот обработчик нужен для корректной работы с клавиатурой
+        # но мы не хотим, чтобы он вызывал сохранение при программном изменении
+        if current and not self.programmatic_load:
+            # Только если это не программное изменение
+            self.on_note_selected(current)
+
 def main():
     app = QApplication(sys.argv)
     
@@ -1146,13 +1122,6 @@ def main():
         sys.exit(1)
     
     window = NotesApp()
-    
-    # Обработка закрытия окна
-    def on_close():
-        window.save_window_settings()
-        app.quit()
-    
-    window.closeEvent = lambda event: on_close()
     
     sys.exit(app.exec())
 

@@ -36,7 +36,7 @@ def build_executable():
         '--add-data=icons;icons',       # Добавляем папку с иконками
         '--add-data=translations.py;.', # Добавляем файл переводов
         '--add-data=config.py;.',       # Добавляем файл конфигурации
-        '--add-data=database.py;.',     # Добавляем файл базы данных
+        '--add-data=database_manager.py;.',     # Добавляем файл менеджера базы данных
         '--add-data=settings_dialog.py;.', # Добавляем диалог настроек
         '--add-data=toolbar_manager.py;.', # Добавляем менеджер панели инструментов
         '--hidden-import=PyQt6.QtCore',
