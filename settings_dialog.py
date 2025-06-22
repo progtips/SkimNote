@@ -7,13 +7,14 @@ from translations import TRANSLATIONS
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.config = Config()
-        self.current_language = self.config.get('language', 'Русский')
+        self.main_window = parent
+        self.current_language = self.main_window.current_language
         self.setup_ui()
         self.load_settings()
         
     def setup_ui(self):
         """Настройка пользовательского интерфейса"""
+        self.setWindowTitle(TRANSLATIONS[self.current_language]['settings_title'])
         layout = QVBoxLayout(self)
         
         # Язык интерфейса
@@ -39,25 +40,22 @@ class SettingsDialog(QDialog):
         # Размер шрифта
         font_layout = QHBoxLayout()
         font_label = QLabel(TRANSLATIONS[self.current_language]['settings_font_size'])
-        self.font_size = QSpinBox()
-        self.font_size.setRange(8, 24)
-        self.font_size.setValue(12)
+        self.font_size_spin = QSpinBox()
+        self.font_size_spin.setRange(8, 24)
         font_layout.addWidget(font_label)
-        font_layout.addWidget(self.font_size)
+        font_layout.addWidget(self.font_size_spin)
         layout.addLayout(font_layout)
         
         # Кнопки
         button_layout = QHBoxLayout()
-        save_button = QPushButton(TRANSLATIONS[self.current_language]['settings_save'])
-        save_button.clicked.connect(self.save_settings)
+        ok_button = QPushButton(TRANSLATIONS[self.current_language]['settings_save'])
+        ok_button.clicked.connect(self.accept)
         cancel_button = QPushButton(TRANSLATIONS[self.current_language]['settings_cancel'])
         cancel_button.clicked.connect(self.reject)
-        button_layout.addWidget(save_button)
+        button_layout.addStretch()
+        button_layout.addWidget(ok_button)
         button_layout.addWidget(cancel_button)
         layout.addLayout(button_layout)
-        
-        # Устанавливаем заголовок окна
-        self.setWindowTitle(TRANSLATIONS[self.current_language]['settings_title'])
         
     def browse_db_path(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -70,27 +68,15 @@ class SettingsDialog(QDialog):
             self.db_path_edit.setText(file_path)
         
     def load_settings(self):
-        """Загрузка настроек"""
-        settings = self.config.get_settings()
+        """Загрузка настроек из главного окна"""
+        self.lang_combo.setCurrentText(self.main_window.current_language)
+        self.db_path_edit.setText(self.main_window.db.db_path)
+        self.font_size_spin.setValue(self.main_window.font_size)
         
-        # Загружаем язык интерфейса
-        lang_index = self.lang_combo.findText(settings.get('language', 'Русский'))
-        if lang_index >= 0:
-            self.lang_combo.setCurrentIndex(lang_index)
-        
-        # Загружаем путь к базе данных
-        self.db_path_edit.setText(settings.get('db_path', 'notes.db'))
-        
-        # Загружаем размер шрифта
-        self.font_size.setValue(settings.get('font_size', 12))
-        
-    def save_settings(self):
-        """Сохранение настроек"""
-        settings = {
+    def get_settings(self):
+        """Возвращает выбранные настройки"""
+        return {
             'language': self.lang_combo.currentText(),
             'db_path': self.db_path_edit.text(),
-            'font_size': self.font_size.value()
-        }
-        
-        self.config.save_settings(settings)
-        self.accept() 
+            'font_size': self.font_size_spin.value()
+        } 

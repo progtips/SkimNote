@@ -209,27 +209,7 @@ class DatabaseManager:
             "", 
             "SQLite Database (*.db);;All Files (*.*)"
         )
-        
-        if file_name:
-            return self.switch_to_database(file_name)
-        return False
-        
-    def switch_to_database(self, db_path):
-        """Переключение на новую базу данных"""
-        try:
-            # Закрываем текущее соединение
-            if self.db:
-                self.db.close()
-            
-            # Сохраняем новый путь в настройки
-            if self.save_db_path_to_settings(db_path):
-                # Инициализируем новую базу данных
-                self.init_database(db_path)
-                return True
-            return False
-        except Exception as e:
-            print(f"Ошибка при переключении БД: {e}")
-            return False
+        return file_name if file_name else None
             
     def restore_database(self, parent_widget, backup_manager):
         """Восстановление базы данных из бэкапа"""
@@ -292,14 +272,14 @@ class DatabaseManager:
                     self.init_database(main_db_path)
                     
                     QMessageBox.information(
-                        parent_widget, 
+                        parent_widget,
                         TRANSLATIONS[self.current_language]['restore_title'],
                         TRANSLATIONS[self.current_language]['restore_success']
                     )
                     return True
                 else:
                     QMessageBox.critical(
-                        parent_widget, 
+                        parent_widget,
                         TRANSLATIONS[self.current_language]['restore_title'],
                         "Ошибка при восстановлении базы данных"
                     )
@@ -310,4 +290,4 @@ class DatabaseManager:
         """Закрытие соединения с базой данных"""
         if self.db:
             self.db.close()
-            self.db = None 
+            self.db = None

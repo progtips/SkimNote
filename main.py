@@ -114,7 +114,8 @@ class NotesApp(QMainWindow):
                 height = config_parser.getint('Window', 'height', fallback=600)
                 
                 # Устанавливаем позицию и размер окна
-                self.setGeometry(x, y, width, height)
+                self.move(x, y)
+                self.resize(width, height)
                 
                 # Загружаем остальные настройки
                 self.font_size = config_parser.getint('Font', 'size', fallback=12)
@@ -687,20 +688,33 @@ class NotesApp(QMainWindow):
     def show_settings(self):
         dialog = SettingsDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            # Применяем новые настройки
+            new_settings = dialog.get_settings()
+            
+            # Применяем и сохраняем новые настройки
+            self.font_size = new_settings['font_size']
             self.apply_theme()
             
+            # Проверяем, изменился ли путь к БД
+            new_db_path = new_settings['db_path']
+            if new_db_path != self.db.db_path:
+                # Закрываем старую БД
+                self.db_manager.close_database()
+                # Инициализируем новую
+                self.db_manager.init_database(new_db_path)
+                self.db = self.db_manager.db
+                # Перезагружаем заметки
+                self.load_notes()
+
             # Проверяем, изменился ли язык
-            new_language = dialog.lang_combo.currentText()
-            if new_language != self.current_language:
-                self.current_language = new_language
-                # Сохраняем настройки
-                self.save_window_settings()
-                # Показываем сообщение о смене языка
-                QMessageBox.information(self, TRANSLATIONS[self.current_language]['language_change_title'],
-                                      TRANSLATIONS[self.current_language]['language_change_message'])
-                # Запускаем перезагрузку интерфейса через таймер
-                QTimer.singleShot(100, self.reload_interface)
+            new_language = new_settings['language']
+            language_changed = new_language != self.current_language
+            self.current_language = new_language
+            
+            # Сохраняем все настройки в файл
+            self.save_window_settings()
+
+            if language_changed:
+                self.reload_interface()
 
     def reload_interface(self):
         """Перезагрузка интерфейса при смене языка"""
@@ -918,7 +932,13 @@ class NotesApp(QMainWindow):
         self.move(x, y)
 
     def change_db(self):
-        if self.db_manager.change_database(self):
+        new_db_path = self.db_manager.change_database(self)
+        if new_db_path:
+            self.save_current_note()
+            self.db_manager.close_database()
+            self.db_manager.init_database(new_db_path)
+            self.db = self.db_manager.db
+            self.save_window_settings()
             self.load_notes()
 
     def save_settings_dialog_db_path(self, db_path):
@@ -1059,9 +1079,9 @@ class NotesApp(QMainWindow):
             if not config.has_section('Window'):
                 config.add_section('Window')
             
-            # Сохраняем размеры и позицию окна
-            config['Window']['x'] = str(self.x())
-            config['Window']['y'] = str(self.y())
+            # Сохраняем размеры и позицию окна, не допуская отрицательных значений
+            config['Window']['x'] = str(max(0, self.x()))
+            config['Window']['y'] = str(max(0, self.y()))
             config['Window']['width'] = str(self.width())
             config['Window']['height'] = str(self.height())
             
