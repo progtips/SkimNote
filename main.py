@@ -564,6 +564,8 @@ class NotesApp(QMainWindow):
             self.tree.setCurrentItem(found_item)
             self.tree.scrollToItem(found_item)
             self.programmatic_load = False
+            # Явно загружаем содержимое выбранной заметки
+            self.on_note_selected(found_item)
 
     def new_note(self):
         """Создать новую заметку"""
