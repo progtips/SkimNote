@@ -7,6 +7,11 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QListWidget)
 from PyQt6.QtCore import Qt, QSize, QSettings, QTimer
 from PyQt6.QtGui import QAction, QIcon, QKeySequence, QFontDatabase, QFont, QGuiApplication
+from PyQt6.QtGui import QTextCursor
+from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor
+from PyQt6.QtCore import QUrl
+import re
 from database_manager import DatabaseManager
 from config import Config
 from settings_dialog import SettingsDialog
@@ -96,6 +101,111 @@ class NotesApp(QMainWindow):
                 return
             # На всякий случай fallback к стандартному поведению
             super().insertFromMimeData(source)
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            # Регулярка для URL (простая и быстрая)
+            self._url_regex = re.compile(r"(https?://\S+|www\.[\w-]+\.[\w\.-]+\S*)", re.IGNORECASE)
+            self.setMouseTracking(True)
+
+        def _word_under_cursor(self, pos):
+            cursor = self.cursorForPosition(pos)
+            if cursor is None:
+                return ""
+            # Расширяем выделение до границ URL-подобного слова
+            cursor.select(QTextCursor.SelectionType.WordUnderCursor)
+            text = cursor.selectedText()
+            # Иногда WordUnderCursor обрезает URL по символам, попробуем расширить вручную
+            if text and not self._is_url(text):
+                # Попробуем захватить символы слева/справа, подходящие для URL
+                text = self._expand_to_url(cursor)
+            return text
+
+        def _expand_to_url(self, cursor):
+            # Расширяемся по символам URL (буквы, цифры, .:/?#@!$&'()*+,;=%- _)
+            doc = self.document()
+            start = cursor.selectionStart()
+            end = cursor.selectionEnd()
+            pos_left = start
+            pos_right = end
+            def char_at(i):
+                c = doc.characterAt(i)
+                return "" if c == "\uFFFF" else str(c)
+            def is_url_char(c):
+                return bool(re.match(r"[\w\-\.:/#?@!$&'()*+,;=%]", c))
+            # расширяем влево
+            i = start - 1
+            while i >= 0 and is_url_char(char_at(i)):
+                pos_left = i
+                i -= 1
+            # расширяем вправо
+            j = end
+            while is_url_char(char_at(j)):
+                pos_right = j + 1
+                j += 1
+            c2 = QTextCursor(doc)
+            c2.setPosition(pos_left)
+            c2.setPosition(pos_right, QTextCursor.MoveMode.KeepAnchor)
+            return c2.selectedText()
+
+        def _is_url(self, text):
+            return bool(self._url_regex.fullmatch(text)) or bool(self._url_regex.search(text))
+
+        def _normalize_url(self, text):
+            t = text.strip()
+            # Снимаем возможные завершающие знаки пунктуации
+            t = t.rstrip(').,;:!?>\']"')
+            if t.lower().startswith('http://') or t.lower().startswith('https://'):
+                return t
+            if t.lower().startswith('www.'):
+                return 'https://' + t
+            return t
+
+        def mouseReleaseEvent(self, event):
+            if event.button() == Qt.MouseButton.LeftButton:
+                text = self._word_under_cursor(event.position().toPoint())
+                if text and self._is_url(text):
+                    url = QUrl(self._normalize_url(text))
+                    if url.isValid():
+                        QDesktopServices.openUrl(url)
+                        return
+            super().mouseReleaseEvent(event)
+
+        def mouseMoveEvent(self, event):
+            # Показываем курсор-ссылку при hover над URL (без Ctrl)
+            text = self._word_under_cursor(event.position().toPoint())
+            if text and self._is_url(text):
+                self.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
+            else:
+                self.viewport().unsetCursor()
+            super().mouseMoveEvent(event)
+
+        def contextMenuEvent(self, event):
+            menu = self.createStandardContextMenu()
+            text = self._word_under_cursor(event.pos())
+            if text and self._is_url(text):
+                open_action_text = 'Открыть ссылку'  # локализацию можно добавить при необходимости
+                action = menu.addAction(open_action_text)
+                def _open():
+                    url = QUrl(self._normalize_url(text))
+                    if url.isValid():
+                        QDesktopServices.openUrl(url)
+                action.triggered.connect(_open)
+            menu.exec(event.globalPos())
+
+    class UrlHighlighter(QSyntaxHighlighter):
+        """Подсветка URL: синий цвет и подчёркивание, как в браузере."""
+        def __init__(self, parent):
+            super().__init__(parent)
+            self._url_regex = re.compile(r"(https?://\S+|www\.[\w-]+\.[\w\.-]+\S*)", re.IGNORECASE)
+            self._format = QTextCharFormat()
+            self._format.setForeground(QColor(0, 102, 204))
+            self._format.setFontUnderline(True)
+
+        def highlightBlock(self, text):
+            for match in self._url_regex.finditer(text):
+                start, end = match.start(), match.end()
+                self.setFormat(start, end - start, self._format)
 
     def __init__(self):
         super().__init__()
@@ -475,6 +585,8 @@ class NotesApp(QMainWindow):
         
         # Создаем редактор (вставка только простого текста)
         self.editor = self.PlainTextPasteEdit()
+        # Включаем подсветку URL
+        self.url_highlighter = self.UrlHighlighter(self.editor.document())
         self.editor.textChanged.connect(self.on_text_changed)
         right_layout.addWidget(self.editor)
         
