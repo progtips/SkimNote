@@ -141,6 +141,18 @@ class NotesApp(QMainWindow):
             self.current_language = config.get('language', 'Русский')
             self.set_default_settings()
         
+        # Загружаем состояние дерева (раскрытые узлы)
+        try:
+            config_parser = configparser.ConfigParser()
+            if os.path.exists(self.SETTINGS_FILE):
+                config_parser.read(self.SETTINGS_FILE, encoding='utf-8')
+                if config_parser.has_section('Tree'):
+                    raw = config_parser.get('Tree', 'expanded_ids', fallback='')
+                    ids = [s for s in raw.split(',') if s.strip()]
+                    self.expanded_note_ids = set(int(s) for s in ids)
+        except Exception:
+            self.expanded_note_ids = set()
+
         # Настройка интерфейса
         self.create_actions()
         self.setup_ui()
@@ -191,6 +203,8 @@ class NotesApp(QMainWindow):
         
         # Инициализация менеджера панели инструментов
         self.toolbar_manager = None
+        # Состояние развёрнутости дерева заметок (множество note_id)
+        self.expanded_note_ids = set()
 
     def init_db(self, db_path='notes.db'):
         """Инициализация базы данных"""
@@ -447,6 +461,9 @@ class NotesApp(QMainWindow):
         self.tree.itemDoubleClicked.connect(self.on_note_double_clicked)
         self.tree.currentItemChanged.connect(self.on_current_item_changed)
         self.tree.itemChanged.connect(self.on_item_changed)
+        # Отслеживаем разворачивание/сворачивание веток
+        self.tree.itemExpanded.connect(self.on_item_expanded)
+        self.tree.itemCollapsed.connect(self.on_item_collapsed)
         left_layout.addWidget(self.tree)
         
         # Добавляем левую панель в главный layout
@@ -502,8 +519,19 @@ class NotesApp(QMainWindow):
                     item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)  # Делаем элемент редактируемым
                     tree_items[note_id] = item
         
-        # Сворачиваем все элементы дерева при запуске
+        # Применяем сохранённое состояние раскрытия
+        def apply_expand_state(item):
+            note_id = item.data(0, Qt.ItemDataRole.UserRole)
+            if note_id in self.expanded_note_ids:
+                self.tree.expandItem(item)
+            for idx in range(item.childCount()):
+                apply_expand_state(item.child(idx))
+
+        # По умолчанию сворачиваем всё
         self.tree.collapseAll()
+        # Применяем состояние для каждого верхнего уровня
+        for i in range(self.tree.topLevelItemCount()):
+            apply_expand_state(self.tree.topLevelItem(i))
         
         # Выбираем первую заметку, если она есть
         if self.tree.topLevelItemCount() > 0:
@@ -1094,6 +1122,20 @@ class NotesApp(QMainWindow):
         except Exception as e:
             print(f"DEBUG: Ошибка при сохранении заголовка: {str(e)}")
 
+    def on_item_expanded(self, item):
+        """Сохраняем ID узла как раскрытый"""
+        note_id = item.data(0, Qt.ItemDataRole.UserRole)
+        if note_id:
+            self.expanded_note_ids.add(int(note_id))
+            self.save_window_settings()
+
+    def on_item_collapsed(self, item):
+        """Удаляем ID узла из раскрытых"""
+        note_id = item.data(0, Qt.ItemDataRole.UserRole)
+        if note_id and int(note_id) in self.expanded_note_ids:
+            self.expanded_note_ids.remove(int(note_id))
+            self.save_window_settings()
+
     def move_note_up(self):
         """Переместить заметку вверх среди соседей"""
         item = self.tree.currentItem()
@@ -1180,6 +1222,11 @@ class NotesApp(QMainWindow):
             if hasattr(self, 'db') and self.db:
                 config['Database']['path'] = self.db.db_path
             
+            # Сохраняем состояние раскрытых узлов
+            if not config.has_section('Tree'):
+                config.add_section('Tree')
+            config['Tree']['expanded_ids'] = ','.join(str(i) for i in sorted(self.expanded_note_ids))
+
             # Сохраняем настройки шрифта
             if not config.has_section('Font'):
                 config.add_section('Font')
