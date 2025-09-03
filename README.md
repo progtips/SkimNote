@@ -37,50 +37,6 @@ The application is portable: the database (`notes.db`), settings file (`settings
 2.  Скачайте последнюю версию `SkimNote_Setup.exe`.
 3.  Запустите установщик и следуйте инструкциям.
 
-Либо запустите портативную версию, скачав `SkimNote.exe` и разместив его в любой папке.
-
-### Запуск из исходного кода / Running from Source
-
-1.  **Клонируйте репозиторий:**
-    ```bash
-    git clone https://github.com/your_username/SkimNote.git
-    cd SkimNote
-    ```
-
-2.  **Создайте виртуальное окружение и установите зависимости:**
-    ```bash
-    # Для Windows
-    python -m venv venv
-    venv\Scripts\activate
-    
-    # Для macOS/Linux
-    python3 -m venv venv
-    source venv/bin/activate
-    
-    # Установка зависимостей
-    pip install -r requirements.txt
-    ```
-
-3.  **Запустите приложение:**
-    ```bash
-    python main.py
-    ```
-
-## Сборка / Building
-
-Вы можете самостоятельно собрать исполняемый файл с помощью PyInstaller.
-
-1.  Убедитесь, что все зависимости установлены.
-2.  Выполните скрипт сборки:
-    ```bash
-    # Для Windows
-    build.bat
-    
-    # Для macOS/Linux (потребуется создать build.sh)
-    # python -m PyInstaller --onefile --windowed --name SkimNote --icon=icons/app.ico main.py
-    ```
-    Готовый `SkimNote.exe` появится в папке `dist`.
-
 ## Структура проекта / Project Structure
 
 -   `main.py`: Основной файл приложения с логикой интерфейса.

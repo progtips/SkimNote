@@ -502,8 +502,8 @@ class NotesApp(QMainWindow):
                     item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)  # Делаем элемент редактируемым
                     tree_items[note_id] = item
         
-        # Раскрываем все элементы дерева
-        self.tree.expandAll()
+        # Сворачиваем все элементы дерева при запуске
+        self.tree.collapseAll()
         
         # Выбираем первую заметку, если она есть
         if self.tree.topLevelItemCount() > 0:
