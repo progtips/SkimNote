@@ -103,7 +103,7 @@ pip install -r requirements.txt
 ### Изменение версии
 Отредактируйте файл `installer.iss`:
 ```ini
-AppVersion=1.0
+AppVersion=1.02
 ```
 
 ### Изменение информации о разработчике

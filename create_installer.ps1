@@ -2,7 +2,7 @@
 # Этот скрипт создает самораспаковывающийся архив с установщиком
 
 param(
-    [string]$Version = "1.0",
+    [string]$Version = "1.02",
     [string]$OutputName = "SkimNote_Setup"
 )
 

@@ -40,10 +40,10 @@ def create_installer():
     # Создаем bat-файл для установки
     install_script = '''@echo off
 chcp 65001 >nul
-title Установка SkimNote v1.0
+title Установка SkimNote v1.02
 
 echo ========================================
-echo    Установка SkimNote v1.0
+echo    Установка SkimNote v1.02
 echo ========================================
 echo.
 
@@ -165,10 +165,10 @@ pause
     # Создаем основной установщик
     main_installer = '''@echo off
 chcp 65001 >nul
-title Установщик SkimNote v1.0
+title Установщик SkimNote v1.02
 
 echo ========================================
-echo    Установщик SkimNote v1.0
+echo    Установщик SkimNote v1.02
 echo ========================================
 echo.
 echo Этот установщик распакует и установит

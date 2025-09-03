@@ -514,15 +514,28 @@ class NotesApp(QMainWindow):
             self.on_note_selected(first_item)
 
     def select_note_by_id(self, note_id):
-        """Выбор заметки по ID"""
+        """Выбор заметки по ID (ищет во всём дереве, включая вложенные)."""
+        def find_in_subtree(root_item):
+            if root_item.data(0, Qt.ItemDataRole.UserRole) == note_id:
+                return root_item
+            for idx in range(root_item.childCount()):
+                found = find_in_subtree(root_item.child(idx))
+                if found is not None:
+                    return found
+            return None
+
+        found_item = None
         for i in range(self.tree.topLevelItemCount()):
-            item = self.tree.topLevelItem(i)
-            if item.data(0, Qt.ItemDataRole.UserRole) == note_id:
-                self.programmatic_load = True  # Устанавливаем флаг перед программным выбором
-                self.tree.setCurrentItem(item)
-                self.tree.scrollToItem(item)
-                self.programmatic_load = False  # Сбрасываем флаг после программного выбора
+            top_item = self.tree.topLevelItem(i)
+            found_item = find_in_subtree(top_item)
+            if found_item is not None:
                 break
+
+        if found_item is not None:
+            self.programmatic_load = True
+            self.tree.setCurrentItem(found_item)
+            self.tree.scrollToItem(found_item)
+            self.programmatic_load = False
 
     def new_note(self):
         """Создать новую заметку"""

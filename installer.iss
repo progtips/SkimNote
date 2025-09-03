@@ -4,7 +4,7 @@
 [Setup]
 ; Основная информация о программе
 AppName=SkimNote
-AppVersion=1.0
+AppVersion=1.02
 AppPublisher=ProgTips
 AppPublisherURL=https://progtips.ru/skimnote
 AppSupportURL=https://progtips.ru/skimnote
