@@ -596,6 +596,30 @@ class NotesApp(QMainWindow):
                               TRANSLATIONS[self.current_language]['cannot_delete_root'])
             return
         
+        # Определяем, кого выделить после удаления: предыдущего соседа, иначе родителя
+        target_note_id = None
+        parent_item = current_item.parent()
+        if parent_item:
+            idx = parent_item.indexOfChild(current_item)
+            if idx > 0:
+                prev_sibling = parent_item.child(idx - 1)
+                target_note_id = prev_sibling.data(0, Qt.ItemDataRole.UserRole)
+            else:
+                target_note_id = parent_item.data(0, Qt.ItemDataRole.UserRole)
+        else:
+            # Верхний уровень
+            idx = self.tree.indexOfTopLevelItem(current_item)
+            if idx > 0:
+                prev_top = self.tree.topLevelItem(idx - 1)
+                target_note_id = prev_top.data(0, Qt.ItemDataRole.UserRole)
+            else:
+                # Нет предыдущего сверху — попробуем выбрать следующий после удаления
+                if self.tree.topLevelItemCount() > 1:
+                    next_top = self.tree.topLevelItem(idx + 1)
+                    target_note_id = next_top.data(0, Qt.ItemDataRole.UserRole)
+                else:
+                    target_note_id = None
+
         reply = QMessageBox.question(self, TRANSLATIONS[self.current_language]['confirm_title'],
                                    TRANSLATIONS[self.current_language]['confirm_delete'],
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
@@ -604,6 +628,9 @@ class NotesApp(QMainWindow):
             try:
                 self.db.delete_note(note_id)
                 self.load_notes()
+                # Выполняем выбор рассчитанной заметки, если есть
+                if target_note_id:
+                    self.select_note_by_id(target_note_id)
             except Exception as e:
                 print(f"DEBUG: Ошибка при удалении заметки: {str(e)}")
 
