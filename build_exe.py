@@ -26,9 +26,9 @@ def build_executable():
     """Сборка исполняемого файла"""
     print("Начинаем сборку исполняемого файла...")
     
-    # Команда для PyInstaller
+    # Команда для PyInstaller через модуль (устойчиво к путям)
     cmd = [
-        'pyinstaller',
+        sys.executable, '-m', 'PyInstaller',
         '--onefile',                    # Один файл
         '--windowed',                   # Без консольного окна
         '--name=SkimNote',              # Имя исполняемого файла
