@@ -650,8 +650,15 @@ class NotesApp(QMainWindow):
                 else:
                     target_note_id = None
 
+        # Готовим текст подтверждения с учётом наличия подзаметок
+        has_children = current_item.childCount() > 0
+        confirm_text = TRANSLATIONS[self.current_language]['confirm_delete']
+        if has_children:
+            confirm_text = (confirm_text + "\n\n" +
+                TRANSLATIONS[self.current_language]['confirm_delete_with_children'])
+
         reply = QMessageBox.question(self, TRANSLATIONS[self.current_language]['confirm_title'],
-                                   TRANSLATIONS[self.current_language]['confirm_delete'],
+                                   confirm_text,
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
         if reply == QMessageBox.StandardButton.Yes:
