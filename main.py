@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QCheckBox, QSpinBox, QComboBox, QFileDialog, QGroupBox,
                             QListWidget)
 from PyQt6.QtCore import Qt, QSize, QSettings, QTimer
-from PyQt6.QtGui import QAction, QIcon, QKeySequence, QFontDatabase, QFont
+from PyQt6.QtGui import QAction, QIcon, QKeySequence, QFontDatabase, QFont, QGuiApplication
 from database_manager import DatabaseManager
 from config import Config
 from settings_dialog import SettingsDialog
@@ -87,6 +87,16 @@ class SearchDialog(QDialog):
 class NotesApp(QMainWindow):
     SETTINGS_FILE = os.path.join(BASE_DIR, 'settings.ini')
 
+    class PlainTextPasteEdit(QTextEdit):
+        """Редактор, который всегда вставляет простой текст."""
+        def insertFromMimeData(self, source):
+            # Если есть простой текст — вставляем его, игнорируя форматирование/HTML
+            if source and source.hasText():
+                self.insertPlainText(source.text())
+                return
+            # На всякий случай fallback к стандартному поведению
+            super().insertFromMimeData(source)
+
     def __init__(self):
         super().__init__()
         
@@ -153,6 +163,9 @@ class NotesApp(QMainWindow):
         # Показываем окно
         self.show()
         
+        # После показа окна гарантируем видимость в рабочих пределах экрана
+        QTimer.singleShot(0, self.ensure_window_visible)
+
         # Принудительно показываем панель инструментов после отображения окна
         QTimer.singleShot(100, self.show_toolbar)
 
@@ -443,8 +456,8 @@ class NotesApp(QMainWindow):
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         
-        # Создаем редактор
-        self.editor = QTextEdit()
+        # Создаем редактор (вставка только простого текста)
+        self.editor = self.PlainTextPasteEdit()
         self.editor.textChanged.connect(self.on_text_changed)
         right_layout.addWidget(self.editor)
         
@@ -930,6 +943,37 @@ class NotesApp(QMainWindow):
         y = (screen.height() - size.height()) // 2
         # Перемещаем окно
         self.move(x, y)
+
+    def ensure_window_visible(self):
+        """Делает окно видимым в границах рабочего стола, учитывая рамки и активный экран."""
+        try:
+            screen_obj = self.screen() or QApplication.primaryScreen()
+            if not screen_obj:
+                self.center_on_screen()
+                return
+            screen_geom = screen_obj.availableGeometry()
+            win_frame = self.frameGeometry()
+
+            # Если окно вообще вне экрана — центрируем
+            if not screen_geom.intersects(win_frame):
+                self.center_on_screen()
+                return
+
+            # Подрезаем позицию так, чтобы окно точно помещалось в рабочую область
+            new_x = win_frame.left()
+            new_y = win_frame.top()
+            if win_frame.right() > screen_geom.right():
+                new_x = max(screen_geom.left(), screen_geom.right() - win_frame.width())
+            if win_frame.left() < screen_geom.left():
+                new_x = screen_geom.left()
+            if win_frame.bottom() > screen_geom.bottom():
+                new_y = max(screen_geom.top(), screen_geom.bottom() - win_frame.height())
+            if win_frame.top() < screen_geom.top():
+                new_y = screen_geom.top()
+            if (new_x, new_y) != (win_frame.left(), win_frame.top()):
+                self.move(new_x, new_y)
+        except Exception:
+            self.center_on_screen()
 
     def change_db(self):
         new_db_path = self.db_manager.change_database(self)
