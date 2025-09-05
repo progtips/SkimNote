@@ -4,6 +4,8 @@ body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 -apple-system
 header{padding:56px 20px;text-align:center;background:linear-gradient(180deg,rgba(0,0,0,.05),rgba(0,0,0,0))}
 h1{margin:0 0 8px;font-size:44px}
 header p{margin:0 0 24px;color:var(--muted)}
+.screenshot{margin:24px 0;text-align:center}
+.screenshot img{max-width:100%;height:auto;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1)}
 .actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
 .btn{display:inline-block;padding:10px 16px;border-radius:8px;background:#28a745;color:#fff;text-decoration:none;font-weight:600}
 .btn.secondary{background:#6c757d}

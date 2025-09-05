@@ -1,0 +1,54 @@
+<svg width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+  <!-- Фон окна -->
+  <rect width="800" height="600" fill="#f8f9fa" stroke="#dee2e6" stroke-width="2"/>
+  
+  <!-- Заголовок окна -->
+  <rect x="0" y="0" width="800" height="40" fill="#ffffff" stroke="#dee2e6" stroke-width="1"/>
+  <text x="20" y="25" font-family="Arial, sans-serif" font-size="14" fill="#000000">SkimNote</text>
+  
+  <!-- Панель инструментов -->
+  <rect x="0" y="40" width="800" height="50" fill="#ffffff" stroke="#dee2e6" stroke-width="1"/>
+  <rect x="10" y="50" width="80" height="30" fill="#28a745" rx="4"/>
+  <text x="30" y="68" font-family="Arial, sans-serif" font-size="12" fill="#ffffff">Новая заметка</text>
+  <rect x="100" y="50" width="80" height="30" fill="#6c757d" rx="4"/>
+  <text x="120" y="68" font-family="Arial, sans-serif" font-size="12" fill="#ffffff">Поиск</text>
+  
+  <!-- Боковая панель с заметками -->
+  <rect x="0" y="90" width="250" height="510" fill="#ffffff" stroke="#dee2e6" stroke-width="1"/>
+  <text x="10" y="110" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#000000">Заметки</text>
+  
+  <!-- Список заметок -->
+  <rect x="10" y="120" width="230" height="25" fill="#f8f9fa" stroke="#dee2e6" stroke-width="1"/>
+  <text x="15" y="135" font-family="Arial, sans-serif" font-size="12" fill="#000000">📝 Рабочие заметки</text>
+  
+  <rect x="20" y="150" width="220" height="25" fill="#ffffff" stroke="#dee2e6" stroke-width="1"/>
+  <text x="25" y="165" font-family="Arial, sans-serif" font-size="12" fill="#000000">📄 Проект Alpha</text>
+  
+  <rect x="20" y="180" width="220" height="25" fill="#ffffff" stroke="#dee2e6" stroke-width="1"/>
+  <text x="25" y="195" font-family="Arial, sans-serif" font-size="12" fill="#000000">📄 Проект Beta</text>
+  
+  <rect x="10" y="210" width="230" height="25" fill="#f8f9fa" stroke="#dee2e6" stroke-width="1"/>
+  <text x="15" y="225" font-family="Arial, sans-serif" font-size="12" fill="#000000">📝 Личные заметки</text>
+  
+  <rect x="20" y="240" width="220" height="25" fill="#ffffff" stroke="#dee2e6" stroke-width="1"/>
+  <text x="25" y="255" font-family="Arial, sans-serif" font-size="12" fill="#000000">📄 Идеи</text>
+  
+  <!-- Основная область редактирования -->
+  <rect x="250" y="90" width="550" height="510" fill="#ffffff" stroke="#dee2e6" stroke-width="1"/>
+  
+  <!-- Заголовок заметки -->
+  <text x="260" y="110" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#000000">Проект Alpha</text>
+  
+  <!-- Содержимое заметки -->
+  <text x="260" y="140" font-family="Arial, sans-serif" font-size="14" fill="#000000">Это пример заметки в SkimNote.</text>
+  <text x="260" y="160" font-family="Arial, sans-serif" font-size="14" fill="#000000">Программа поддерживает:</text>
+  <text x="280" y="180" font-family="Arial, sans-serif" font-size="14" fill="#000000">• Иерархические заметки</text>
+  <text x="280" y="200" font-family="Arial, sans-serif" font-size="14" fill="#000000">• Поиск по содержимому</text>
+  <text x="280" y="220" font-family="Arial, sans-serif" font-size="14" fill="#000000">• Резервное копирование</text>
+  <text x="280" y="240" font-family="Arial, sans-serif" font-size="14" fill="#000000">• Настройка тем и шрифтов</text>
+  
+  <!-- Текст заметки -->
+  <text x="260" y="280" font-family="Arial, sans-serif" font-size="14" fill="#000000">SkimNote - это удобный менеджер заметок</text>
+  <text x="260" y="300" font-family="Arial, sans-serif" font-size="14" fill="#000000">с поддержкой неограниченной вложенности</text>
+  <text x="260" y="320" font-family="Arial, sans-serif" font-size="14" fill="#000000">и портативным хранением данных.</text>
+</svg>
